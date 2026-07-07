@@ -1,0 +1,88 @@
+services:
+  # ==================== MySQL 데이터베이스 ====================
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-edutech}
+      MYSQL_USER: ${MYSQL_USER:-edutech}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-edutech}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    volumes:
+      - db-data:/var/lib/mysql
+    ports:
+      # 로컬 개발용 (호스트에서 직접 DB 접속). 필요 없으면 제거해도 됨
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # ==================== DB 마이그레이션 (일회성) ====================
+  migrate:
+    build:
+      context: .
+      target: build
+    command: ["pnpm", "db:push"]
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-edutech}:${MYSQL_PASSWORD:-edutech}@db:3306/${MYSQL_DATABASE:-edutech}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # ==================== API 서버 (Express + tRPC) ====================
+  server:
+    build:
+      context: .
+      target: server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: mysql://${MYSQL_USER:-edutech}:${MYSQL_PASSWORD:-edutech}@db:3306/${MYSQL_DATABASE:-edutech}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      # ==== AI 공급자 (.env 파일에서 주입) ====
+      # AI_PROVIDER: openai(기본) | google | anthropic | ollama(로컬 GPU)
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_MODEL: ${AI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # 컨테이너에서 호스트 PC의 Ollama에 접근 (extra_hosts 참고)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-}
+      # ==== 외부 서비스 키 ====
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    extra_hosts:
+      # Linux에서도 host.docker.internal로 호스트(Ollama)에 접근 가능하게 함
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ==================== 웹 (nginx: React 정적 파일 + API 프록시) ====================
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  db-data:
