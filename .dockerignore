@@ -1,0 +1,51 @@
+# Dockerfile의 build 스테이지가 `COPY . .` 를 하므로,
+# 여기서 제외한 항목은 빌드 컨텍스트로 전송되지 않습니다.
+# (node_modules는 deps 스테이지에서 pnpm install로 새로 설치됩니다 — 406MB 전송 방지)
+
+# Dependencies — 이미지 안에서 재설치됨
+node_modules/
+.pnpm-store/
+
+# Build output — 이미지 안에서 재빌드됨
+dist/
+build/
+*.tsbuildinfo
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Secrets — 이미지에 절대 굽지 않음 (런타임에 env로 주입)
+.env
+.env.*
+!.env.example
+
+# Logs / caches / coverage
+logs/
+*.log
+coverage/
+.vite/
+.cache/
+
+# Docker 자체 (nginx.conf는 별도 COPY로 사용하므로 docker/는 제외하지 않음)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 배포 플랫폼
+.netlify/
+.vercel/
+netlify.toml
+render.yaml
+
+# 문서 — 런타임에 불필요
+*.md
+LICENSE
+
+# 에디터 / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
