@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
 import { UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -37,9 +38,9 @@ queryClient.getMutationCache().subscribe(event => {
   }
 });
 
-// API URL: 환경 변수로 백엔드 URL 지정 (기본값: 상대 경로)
-const API_URL = import.meta.env.VITE_API_URL || "";
-const TRPC_URL = API_URL ? `${API_URL}/trpc` : "/api/trpc";
+// API URL: VITE_API_URL 로 백엔드 오리진 지정 (기본값: 상대 경로 = 같은 도메인)
+// 서버는 /trpc 와 /api/trpc 를 모두 마운트하므로 어느 쪽이든 동작합니다.
+const TRPC_URL = apiUrl("/api/trpc");
 
 const trpcClient = trpc.createClient({
   links: [

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
 import { Loader2, ArrowLeft, Zap } from "lucide-react";
 import { Link } from "wouter";
@@ -130,8 +131,9 @@ export default function ChemistryStudyPage() {
     if (!pdfText) return;
     setGeneratingQuiz(true);
     try {
-      const response = await fetch("/api/quiz-generate", {
+      const response = await fetch(apiUrl("/api/quiz-generate"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pdfText, subject: "chemistry" }),
       });

@@ -3,6 +3,8 @@
  * This module provides utilities for uploading files to S3 via the backend API
  */
 
+import { apiUrl } from "./api";
+
 export async function storagePut(
   file: File,
   options?: {
@@ -12,7 +14,8 @@ export async function storagePut(
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch("/api/upload", {
+  const response = await fetch(apiUrl("/api/upload"), {
+    credentials: "include",
     method: "POST",
     body: formData,
   });
@@ -30,7 +33,9 @@ export async function storageGet(
     expiresIn?: number;
   }
 ): Promise<string> {
-  const response = await fetch(`/api/download?key=${encodeURIComponent(fileKey)}`);
+  const response = await fetch(apiUrl(`/api/download?key=${encodeURIComponent(fileKey)}`), {
+    credentials: "include",
+  });
 
   if (!response.ok) {
     throw new Error(`Download failed: ${response.statusText}`);

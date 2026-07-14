@@ -1,0 +1,46 @@
+# 프로덕션 오버레이 — docker-compose.yml 위에 겹쳐서 사용합니다.
+#
+#   docker compose -f docker-compose.yml -f compose.prod.yml up -d --build
+#
+# 하는 일:
+#   - Caddy를 앞단에 두어 80/443 을 열고 자동 HTTPS(Let's Encrypt)를 처리
+#   - 뒤단 nginx(web)는 내부 네트워크에서만 접근 (base 파일에서 127.0.0.1 바인딩)
+#   - 컨테이너 로그가 디스크를 채우지 않도록 로테이션
+#
+# 필요한 .env 값: DOMAIN, ACME_EMAIL, CORS_ORIGIN=https://$DOMAIN
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      DOMAIN: "${DOMAIN:?DOMAIN 을 .env 에 설정하세요 — 예 edutech.example.com}"
+      ACME_EMAIL: "${ACME_EMAIL:?ACME_EMAIL 을 .env 에 설정하세요}"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # 발급받은 인증서 (반드시 영속화 — 지우면 재발급 rate limit)
+      - caddy-config:/config
+    depends_on:
+      - web
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    logging: *default-logging
+
+  server:
+    logging: *default-logging
+
+  db:
+    logging: *default-logging
+
+volumes:
+  caddy-data:
+  caddy-config:

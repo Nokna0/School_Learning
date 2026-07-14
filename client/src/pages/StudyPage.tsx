@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Upload, ArrowLeft } from "lucide-react";
 import { Link, useParams } from "wouter";
@@ -64,8 +65,9 @@ export default function StudyPage() {
         const formData = new FormData();
         formData.append("file", file);
 
-        const response = await fetch("/api/upload", {
+        const response = await fetch(apiUrl("/api/upload"), {
           method: "POST",
+          credentials: "include",
           body: formData,
         });
 

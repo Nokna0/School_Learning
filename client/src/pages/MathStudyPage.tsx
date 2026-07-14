@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, ArrowLeft, Zap, BookOpen, X, BookmarkPlus, Check } from "lucide-react";
 import { Link } from "wouter";
+import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
 import MathVisualizer from "@/components/MathVisualizer";
 
@@ -92,7 +93,7 @@ export default function MathStudyPage() {
   /* ====================== PDF 렌더 ======================= */
   async function extractPage(url: string, pageNum: number) {
     const task = pdfjsLib.getDocument({
-      url: `/api/pdf-proxy?u=${encodeURIComponent(url)}`,
+      url: apiUrl(`/api/pdf-proxy?u=${encodeURIComponent(url)}`),
       withCredentials: true,
     });
 
@@ -190,8 +191,9 @@ export default function MathStudyPage() {
     setAnalyzing(true);
 
     try {
-      const res = await fetch("/api/math-analyze", {
+      const res = await fetch(apiUrl("/api/math-analyze"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageBase64: base64.replace(/^data:image\/png;base64,/, ""),
@@ -219,8 +221,9 @@ export default function MathStudyPage() {
     setGuideLoading(true);
 
     try {
-      const ocrRes = await fetch("/api/ocr", {
+      const ocrRes = await fetch(apiUrl("/api/ocr"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64img }),
       });
@@ -260,8 +263,9 @@ export default function MathStudyPage() {
     setAnswerAnalyzing(true);
 
     try {
-      const res = await fetch("/api/answer-explain", {
+      const res = await fetch(apiUrl("/api/answer-explain"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64: base64 }),
       });

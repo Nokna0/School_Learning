@@ -1,0 +1,23 @@
+# 프로덕션 리버스 프록시 (자동 HTTPS)
+#
+# Caddy가 Let's Encrypt 인증서를 자동 발급/갱신하고, 평문 HTTP는 HTTPS로 리다이렉트합니다.
+# 실제 정적 파일 서빙과 /api 프록시는 뒤단 nginx(web 서비스)가 그대로 담당합니다.
+#
+# 필요한 환경 변수 (.env):
+#   DOMAIN     예: edutech.example.com
+#   ACME_EMAIL 인증서 만료 알림 수신 주소
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# PDF 업로드 (서버/nginx 제한 50MB와 동일하게 맞춤)
+	request_body {
+		max_size 50MB
+	}
+
+	reverse_proxy web:80
+}

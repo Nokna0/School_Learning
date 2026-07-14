@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookmarkPlus, Check } from "lucide-react";
+import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
 
 interface HighlightedWord {
@@ -92,7 +93,8 @@ export default function EnglishHighlighter({
 
     try {
       const response = await fetch(
-        `/api/word-definition?word=${encodeURIComponent(word.word)}`,
+        apiUrl(`/api/word-definition?word=${encodeURIComponent(word.word)}`),
+        { credentials: "include" },
       );
       if (response.ok) {
         const data = await response.json();
