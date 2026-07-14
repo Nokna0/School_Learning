@@ -1,38 +1,53 @@
+# Render — 백엔드 API 서버 (Express + tRPC) 전용, 무료 티어
+#
+# 전체 구성:
+#   프론트(SPA) → Netlify        (netlify.toml, 무료)
+#   백엔드 API  → Render         (이 파일, 무료 웹서비스)
+#   MySQL       → TiDB Cloud     (무료, TLS 필수 → DATABASE_SSL=true)
+#   파일        → Cloudinary     (무료)
+#
+# 무료 티어 주의사항:
+#   - 15분 무접속 시 잠들고, 다음 요청에 30~60초 걸린다.
+#     → UptimeRobot 등으로 /health 를 10분마다 호출해 깨워둔다.
+#       (반드시 /health. tRPC 엔드포인트를 찌르면 TiDB 무료 쿼터를 갉아먹는다.)
+#   - 인스턴스 시간이 월 750h 이므로 무료 웹서비스는 반드시 1개만 유지할 것.
+#     (31일 = 744h 이라 1개는 24시간 켜둬도 되지만, 2개면 즉시 초과된다.)
+#   - pre-deploy 명령을 지원하지 않으므로 DB 마이그레이션은 로컬에서 수행한다:
+#       DATABASE_URL=... DATABASE_SSL=true pnpm db:push
+
 services:
-  # 백엔드 API 서버
   - type: web
     name: edutech-api
     runtime: node
-    region: oregon
+    # TiDB 클러스터와 같은 리전에 두어 쿼리 왕복을 줄인다. (한국에서 70~80ms)
+    region: singapore
     plan: free
     buildCommand: npm install && npm run build:server
     startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 3000
-      # 데이터베이스 연결 (아래 database와 자동 연결)
-      - key: DATABASE_URL
-        fromDatabase:
-          name: edutech-db
-          property: connectionString
-      # 다음 환경 변수들은 Render 대시보드에서 수동으로 설정해야 함:
-      # - CLOUDINARY_CLOUD_NAME
-      # - CLOUDINARY_API_KEY
-      # - CLOUDINARY_API_SECRET
-      # - OPENAI_API_KEY
-      # - CORS_ORIGIN (Netlify URL로 설정)
-      # - VITE_APP_TITLE
-      # - VITE_APP_ID
-      # - VITE_OAUTH_PORTAL_URL
-    healthCheckPath: /health
-    autoDeploy: true
+      # PORT 는 Render 가 주입하므로 여기서 지정하지 않는다.
 
-databases:
-  # MySQL 데이터베이스
-  - name: edutech-db
-    databaseName: edutech
-    plan: free
-    # Render는 PostgreSQL만 무료 제공, MySQL은 유료
-    # 대신 PostgreSQL 사용 권장 또는 외부 MySQL 서비스 사용
+      # TiDB Cloud 연결 (TLS 필수)
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_URL
+        sync: false # 대시보드에서 입력 (시크릿)
+
+      # Netlify 프론트 주소. credentials:"include" 를 쓰므로 "*" 는 브라우저가 거부한다.
+      - key: CORS_ORIGIN
+        sync: false # 예: https://edutech.netlify.app
+
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
