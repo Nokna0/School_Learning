@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import MathVisualizer from "@/components/MathVisualizer";
 import StudyShell from "@/components/study/StudyShell";
 import PdfViewer, { type PdfViewerHandle } from "@/components/study/PdfViewer";
+import SharedStudyTools from "@/components/study/SharedStudyTools";
 import { useAnswerSheet } from "@/hooks/useAnswerSheet";
 
 // data URL 접두사를 떼고 순수 base64만 남긴다(서버가 접두사를 다시 붙인다).
@@ -53,6 +54,7 @@ export default function MathStudyPage() {
   const [savedFormulas, setSavedFormulas] = useState<Set<string>>(new Set());
 
   const viewerRef = useRef<PdfViewerHandle>(null);
+  const pdfTextRef = useRef("");
 
   const { data: materialsData } = trpc.materials.list.useQuery({ subject: "math" });
   const materials: StudyMaterial[] = Array.isArray(materialsData) ? materialsData : [];
@@ -307,6 +309,14 @@ export default function MathStudyPage() {
           </CardContent>
         </Card>
       )}
+
+      <div className="border-t pt-3">
+        <SharedStudyTools
+          subject="math"
+          getText={() => pdfTextRef.current}
+          hasMaterial={!!selectedMaterial}
+        />
+      </div>
     </div>
   );
 
@@ -332,6 +342,7 @@ export default function MathStudyPage() {
             fileUrl={selectedMaterial.fileUrl}
             page={currentPage}
             onTotalPages={setTotalPages}
+            onText={(t) => (pdfTextRef.current = t)}
             enableSelection
             onSelectionChange={setHasSelection}
           />

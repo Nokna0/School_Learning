@@ -42,7 +42,7 @@ const ocrSchema = z.object({
 
 const quizGenerateSchema = z.object({
   pdfText: z.string(),
-  subject: z.enum(["math", "english", "chemistry"]),
+  subject: z.enum(["math", "english", "science", "korean"]),
 });
 
 const englishAnalyzeSchema = z.object({
@@ -401,6 +401,225 @@ router.get("/word-definition", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Word definition error:", error);
     return res.status(500).json({ error: "Failed to get definition" });
+  }
+});
+
+// ==================== 공통 학습 도구 (모든 과목) ====================
+// 요약 / 플래시카드 / 핵심 용어 / 개념 풀이는 과목과 무관하게 PDF 텍스트로 동작한다.
+
+const SUBJECT_LABEL_KO: Record<string, string> = {
+  math: "수학",
+  english: "영어",
+  science: "탐구(과학·사회)",
+  korean: "국어",
+};
+
+const studyToolSchema = z.object({
+  text: z.string().min(1),
+  subject: z.enum(["math", "english", "science", "korean"]),
+});
+
+const subjectLabel = (s: string) => SUBJECT_LABEL_KO[s] ?? s;
+
+// POST /api/summarize — 핵심 요약 + 요점 목록
+router.post("/summarize", async (req: Request, res: Response) => {
+  try {
+    const validation = studyToolSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error });
+    }
+    const { text, subject } = validation.data;
+
+    if (!isAiEnabled()) {
+      return res.json({
+        success: true,
+        mock: true,
+        summary: `${aiDisabledReason()} 예시 요약을 표시합니다.`,
+        keyPoints: ["AI 공급자를 설정하면 실제 요약이 생성됩니다."],
+      });
+    }
+
+    const result = await chatJSON<{ summary: string; keyPoints: string[] }>({
+      system:
+        `You summarize ${subjectLabel(subject)} study material for Korean students. ` +
+        'Respond with JSON: {"summary": string (2-4 sentences in Korean), "keyPoints": string[] (3-6 concise Korean bullet points)}.',
+      user: `다음 학습 자료를 요약해줘:\n\n${text.slice(0, 8000)}`,
+      maxTokens: 1500,
+    });
+
+    return res.json({
+      success: true,
+      summary: result.summary ?? "",
+      keyPoints: result.keyPoints ?? [],
+    });
+  } catch (error) {
+    console.error("Summarize error:", error);
+    return res.status(500).json({ error: "Summarize failed" });
+  }
+});
+
+// POST /api/flashcards — 암기용 플래시카드(앞/뒤)
+router.post("/flashcards", async (req: Request, res: Response) => {
+  try {
+    const validation = studyToolSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error });
+    }
+    const { text, subject } = validation.data;
+
+    if (!isAiEnabled()) {
+      return res.json({
+        success: true,
+        mock: true,
+        cards: [
+          { front: "예시 질문", back: `${aiDisabledReason()} 예시 카드입니다.` },
+        ],
+      });
+    }
+
+    const result = await chatJSON<{ cards: { front: string; back: string }[] }>({
+      system:
+        `You create study flashcards from ${subjectLabel(subject)} material for Korean students. ` +
+        'Respond with JSON: {"cards": [{"front": string (question/term in Korean), "back": string (answer/definition in Korean)}]}. ' +
+        "Create 6-10 concise cards based strictly on the provided text.",
+      user: `다음 자료로 암기 카드를 만들어줘:\n\n${text.slice(0, 8000)}`,
+      maxTokens: 2500,
+    });
+
+    return res.json({ success: true, cards: result.cards ?? [] });
+  } catch (error) {
+    console.error("Flashcards error:", error);
+    return res.status(500).json({ error: "Flashcard generation failed" });
+  }
+});
+
+// POST /api/key-terms — 핵심 용어 정리
+router.post("/key-terms", async (req: Request, res: Response) => {
+  try {
+    const validation = studyToolSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error });
+    }
+    const { text, subject } = validation.data;
+
+    if (!isAiEnabled()) {
+      return res.json({
+        success: true,
+        mock: true,
+        terms: [
+          { term: "예시 용어", definition: `${aiDisabledReason()} 예시입니다.` },
+        ],
+      });
+    }
+
+    const result = await chatJSON<{
+      terms: { term: string; definition: string }[];
+    }>({
+      system:
+        `You extract key terms from ${subjectLabel(subject)} material for Korean students. ` +
+        'Respond with JSON: {"terms": [{"term": string, "definition": string (short Korean explanation)}]}. ' +
+        "Pick the 5-12 most important terms from the provided text.",
+      user: `다음 자료에서 핵심 용어를 정리해줘:\n\n${text.slice(0, 8000)}`,
+      maxTokens: 2000,
+    });
+
+    return res.json({ success: true, terms: result.terms ?? [] });
+  } catch (error) {
+    console.error("Key terms error:", error);
+    return res.status(500).json({ error: "Key term extraction failed" });
+  }
+});
+
+// POST /api/concept-explain — 개념 쉽게 풀이
+router.post("/concept-explain", async (req: Request, res: Response) => {
+  try {
+    const validation = studyToolSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error });
+    }
+    const { text, subject } = validation.data;
+
+    if (!isAiEnabled()) {
+      return res.json({
+        success: true,
+        mock: true,
+        concepts: [
+          {
+            name: "예시 개념",
+            explanation: `${aiDisabledReason()} 예시 설명입니다.`,
+            example: "",
+          },
+        ],
+      });
+    }
+
+    const result = await chatJSON<{
+      concepts: { name: string; explanation: string; example: string }[];
+    }>({
+      system:
+        `You are a patient ${subjectLabel(subject)} tutor for Korean students. ` +
+        'Respond with JSON: {"concepts": [{"name": string, "explanation": string (easy Korean explanation), "example": string (a concrete Korean example or "")}]}. ' +
+        "Explain the 3-6 core concepts in the provided text as simply as possible.",
+      user: `다음 자료의 핵심 개념을 쉽게 설명해줘:\n\n${text.slice(0, 8000)}`,
+      maxTokens: 2500,
+    });
+
+    return res.json({ success: true, concepts: result.concepts ?? [] });
+  } catch (error) {
+    console.error("Concept explain error:", error);
+    return res.status(500).json({ error: "Concept explanation failed" });
+  }
+});
+
+// ==================== 국어 지문 분석 ====================
+// POST /api/korean-analyze — 주제 / 정서·어조 / 표현 / 어휘
+const koreanAnalyzeSchema = z.object({ text: z.string().min(1) });
+
+router.post("/korean-analyze", async (req: Request, res: Response) => {
+  try {
+    const validation = koreanAnalyzeSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error });
+    }
+    const { text } = validation.data;
+
+    if (!isAiEnabled()) {
+      return res.json({
+        success: true,
+        mock: true,
+        theme: `${aiDisabledReason()} 예시 분석을 표시합니다.`,
+        tone: "",
+        expressions: [],
+        vocabulary: [],
+      });
+    }
+
+    const result = await chatJSON<{
+      theme: string;
+      tone: string;
+      expressions: { expression: string; effect: string }[];
+      vocabulary: { word: string; meaning: string }[];
+    }>({
+      system:
+        "You are a Korean-language (국어) teacher analyzing a passage for Korean high-school students. " +
+        'Respond with JSON: {"theme": string (주제/중심 내용), "tone": string (화자의 정서·어조), ' +
+        '"expressions": [{"expression": string (표현/수사법), "effect": string (효과)}], ' +
+        '"vocabulary": [{"word": string (어려운 어휘·한자어), "meaning": string (뜻)}]}. ' +
+        "Write everything in Korean based strictly on the passage.",
+      user: `다음 국어 지문을 분석해줘:\n\n${text.slice(0, 8000)}`,
+      maxTokens: 2500,
+    });
+
+    return res.json({
+      success: true,
+      theme: result.theme ?? "",
+      tone: result.tone ?? "",
+      expressions: result.expressions ?? [],
+      vocabulary: result.vocabulary ?? [],
+    });
+  } catch (error) {
+    console.error("Korean analysis error:", error);
+    return res.status(500).json({ error: "Korean analysis failed" });
   }
 });
 

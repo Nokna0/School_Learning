@@ -6,7 +6,7 @@ import { getDb } from "../_core/db.js";
 import { cloudinary } from "../_core/cloudinary.js";
 import { materials } from "../schema.js";
 
-const subjectSchema = z.enum(["math", "english", "chemistry"]);
+const subjectSchema = z.enum(["math", "english", "science", "korean"]);
 
 export const materialsRouter = router({
   list: publicProcedure

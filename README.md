@@ -21,9 +21,11 @@
 ### 주요 특징
 
 - 📄 **PDF 분석**: PDF 파일의 텍스트 및 이미지 인식
-- 🧮 **수학 문제 분석**: 수식 추출 및 그래프 시각화
+- 📖 **국어 학습**: 지문의 주제·정서·표현·어휘 분석
 - 📚 **영어 학습**: 단어 분석 및 정의 제공
-- 🔬 **과학 학습**: 화학 개념 학습 및 퀴즈 생성
+- 🧮 **수학 문제 분석**: 수식 추출 및 그래프 시각화
+- 🔬 **탐구 학습**: 과학·사회 탐구 개념 정리 및 퀴즈 생성
+- 🧰 **공통 학습 도구**: 핵심 요약 · 암기 플래시카드 · 핵심 용어 정리 · 개념 풀이 (모든 과목)
 - ✅ **자동 퀴즈 생성**: 학습 자료 기반 백지식 퀴즈 생성
 - 📊 **학습 기록**: 학습 진도 및 성적 추적
 
@@ -33,7 +35,7 @@
 
 - ✅ 사용자 인증 시스템 (로컬 기본 사용자 + OAuth 연동 준비)
 - ✅ PDF 파일 업로드 및 관리 (Cloudinary + MySQL)
-- ✅ 다중 과목 지원 (영어, 수학, 화학)
+- ✅ 다중 과목 지원 (국어, 영어, 수학, 탐구)
 - ✅ PDF 페이지 네비게이션
 - ✅ tRPC를 통한 타입 안전 API (superjson 직렬화)
 - ✅ AI 기반 이미지 분석 — 수식 추출/그래프 설명 (OpenAI Vision)
@@ -101,12 +103,13 @@ Nokna0-School_Hackathon/
 │   │   │   ├── BlankQuiz.tsx       # 퀴즈 컴포넌트
 │   │   │   ├── EnglishHighlighter.tsx
 │   │   │   ├── MathVisualizer.tsx
+│   │   │   ├── study/SharedStudyTools.tsx # 공통 AI 학습 도구(요약/카드/용어/개념/퀴즈)
 │   │   │   └── ...
 │   │   ├── pages/                  # 페이지 컴포넌트
-│   │   │   ├── StudyPage.tsx
+│   │   │   ├── KoreanStudyPage.tsx
 │   │   │   ├── EnglishStudyPage.tsx
 │   │   │   ├── MathStudyPage.tsx
-│   │   │   ├── ChemistryStudyPage.tsx
+│   │   │   ├── ScienceStudyPage.tsx
 │   │   │   └── StudyRecordsPage.tsx
 │   │   ├── lib/
 │   │   │   ├── trpc.ts            # tRPC 클라이언트 설정
@@ -339,6 +342,11 @@ trpc.studyRecords.deleteEnglishWord.useMutation() // { id }
 | POST | `/api/math-analyze` | 수학 이미지 분석 (수식 LaTeX 추출) | AI (비전) |
 | POST | `/api/ocr` | 이미지 텍스트 인식 | AI (비전) |
 | POST | `/api/quiz-generate` | 퀴즈 자동 생성 (5문항) | AI |
+| POST | `/api/summarize` | 핵심 요약 + 요점 목록 (모든 과목) | AI |
+| POST | `/api/flashcards` | 암기용 플래시카드 생성 (모든 과목) | AI |
+| POST | `/api/key-terms` | 핵심 용어 정리 (모든 과목) | AI |
+| POST | `/api/concept-explain` | 개념 쉽게 풀이 (모든 과목) | AI |
+| POST | `/api/korean-analyze` | 국어 지문 분석(주제·정서·표현·어휘) | AI |
 | POST | `/api/english-analyze` | 영어 텍스트 어려운 단어 분석 | AI |
 | POST | `/api/answer-explain` | 답지 단계별 설명 생성 | AI (비전) |
 | GET | `/api/word-definition?word=` | 단어 정의/발음/예문 조회 | AI |
@@ -492,4 +500,4 @@ MIT License - [LICENSE](./LICENSE) 파일 참조
 
 ---
 
-**마지막 업데이트**: 2025년 11월 14일
+**마지막 업데이트**: 2026년 7월 15일

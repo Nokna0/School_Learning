@@ -9,12 +9,14 @@ EduTech(School_Learning) 프로젝트의 구조, 배포 아키텍처, 그리고 
 
 ## 1. 이 앱이 하는 일
 
-PDF 학습 자료(수학·영어·화학)를 올리면 AI가 분석해 주는 학습 도구.
+PDF 학습 자료(국어·영어·수학·탐구)를 올리면 AI가 분석해 주는 학습 도구.
 
 - PDF 업로드 → Cloudinary에 저장, 메타데이터는 DB에
+- **국어**: 지문 분석(주제·정서·표현·어휘)
+- **영어**: 지문 분석 → 단어 하이라이트 → 단어 정의 조회
 - **수학**: 페이지를 이미지로 렌더 → OCR/수식 분석 → 풀이 설명
-- **영어**: 지문 분석 → 단어 하이라이트 → 단어 정의 조회 → 빈칸 퀴즈
-- **화학**: 지문 기반 퀴즈 생성
+- **탐구**: 개념 정리 및 지문 기반 학습
+- **공통 학습 도구(모든 과목)**: 핵심 요약 · 암기 플래시카드 · 핵심 용어 정리 · 개념 쉽게 풀이 · 백지 퀴즈
 - 학습 기록·통계·추천, 수식/단어 저장
 - **계정(아이디/비밀번호/TOTP) 로그인** — 로그인 시 메인이 대시보드, 비로그인 시 홍보 페이지. 비로그인도 기능은 쓰되 학습 현황은 계정에 안 쌓임
 
@@ -60,13 +62,15 @@ School_Learning/
 │       │   ├── SignupPage.tsx           # ★ 회원가입 (평문 저장 경고 배너)
 │       │   ├── AccountPage.tsx          # ★ 계정 설정 — TOTP 켜기/끄기
 │       │   ├── SubjectSelectPage.tsx    # ★ 과목 선택 (/subjects)
-│       │   ├── MathStudyPage.tsx       # PDF 렌더 → OCR → 수식 분석 + 답지 모드
-│       │   ├── EnglishStudyPage.tsx    # 지문 분석 → 단어 → 퀴즈
-│       │   ├── ChemistryStudyPage.tsx  # 퀴즈 생성
+│       │   ├── KoreanStudyPage.tsx     # 국어 지문 분석 + 공통 도구
+│       │   ├── EnglishStudyPage.tsx    # 지문 분석 → 단어 하이라이트 + 공통 도구
+│       │   ├── MathStudyPage.tsx       # PDF 렌더 → OCR → 수식 분석 + 답지 모드 + 공통 도구
+│       │   ├── ScienceStudyPage.tsx    # 탐구 개념 정리(공통 도구)
 │       │   ├── StudyRecordsPage.tsx    # 기록/통계
 │       │   └── NotFound.tsx
 │       ├── components/
-│       │   ├── MaterialUploadButton.tsx # ★ 공용 PDF 업로드 버튼 (세 과목 공통)
+│       │   ├── MaterialUploadButton.tsx # ★ 공용 PDF 업로드 버튼 (네 과목 공통)
+│       │   ├── study/SharedStudyTools.tsx # ★ 공통 AI 학습 도구 (요약/카드/용어/개념/퀴즈)
 │       │   ├── SubjectGrid.tsx          # ★ 공용 과목 선택 카드 (홈/대시보드/선택 페이지)
 │       │   ├── EnglishHighlighter.tsx  # 단어 하이라이트 + 정의 조회
 │       │   ├── BlankQuiz.tsx

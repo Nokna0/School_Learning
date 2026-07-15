@@ -5,13 +5,14 @@ import { router, protectedProcedure } from "../_core/trpc.js";
 import { getDb } from "../_core/db.js";
 import { studyRecords, mathFormulas, englishWords } from "../schema.js";
 
-const subjectSchema = z.enum(["math", "english", "chemistry"]);
-const SUBJECTS = ["math", "english", "chemistry"] as const;
+const subjectSchema = z.enum(["math", "english", "science", "korean"]);
+const SUBJECTS = ["math", "english", "science", "korean"] as const;
 
 const SUBJECT_LABEL: Record<(typeof SUBJECTS)[number], string> = {
   math: "수학",
   english: "영어",
-  chemistry: "화학",
+  science: "탐구",
+  korean: "국어",
 };
 
 export const studyRecordsRouter = router({

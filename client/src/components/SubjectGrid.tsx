@@ -10,10 +10,10 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { SUBJECTS } from "@/lib/subjects";
 
-/** 세 과목 선택 카드 그리드. 과목 선택 페이지·대시보드·홍보 페이지가 공유한다. */
+/** 네 과목 선택 카드 그리드. 과목 선택 페이지·대시보드·홍보 페이지가 공유한다. */
 export default function SubjectGrid() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
       {SUBJECTS.map((s) => (
         <Link key={s.key} href={s.href}>
           <Card className="cursor-pointer border-2 border-transparent hover:border-indigo-400 hover:shadow-lg transition-all h-full">

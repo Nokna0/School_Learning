@@ -35,7 +35,7 @@ interface PdfViewerProps {
   fileUrl: string;
   page: number;
   onTotalPages?: (n: number) => void;
-  /** 현재 페이지 텍스트 추출(영어/화학 분석용). */
+  /** 현재 페이지 텍스트 추출(국어/영어/탐구 등 텍스트 분석용). */
   onText?: (text: string) => void;
   /** 드래그로 영역 선택 활성화(수학용). */
   enableSelection?: boolean;

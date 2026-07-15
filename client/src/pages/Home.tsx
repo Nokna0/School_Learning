@@ -126,13 +126,13 @@ export default function Home() {
             className="floaty absolute left-[20%] bottom-[18%] text-5xl opacity-80 select-none"
             style={{ animationDelay: "-3.4s" }}
           >
-            ⚗️
+            🔬
           </span>
           <span
-            className="floaty absolute right-[20%] bottom-[24%] text-4xl opacity-70 select-none"
+            className="floaty absolute right-[20%] bottom-[24%] text-5xl opacity-70 select-none"
             style={{ animationDelay: "-2.4s" }}
           >
-            ✏️
+            📖
           </span>
         </div>
 
@@ -239,7 +239,7 @@ export default function Home() {
               icon={<Zap className="h-7 w-7" />}
               step="02"
               title="과목별 맞춤 학습"
-              body="영어·수학·화학. 과목마다 특화된 도구로, 단어 하이라이트부터 함수 그래프 시각화까지 딱 맞게 배웁니다."
+              body="국어·영어·수학·탐구. 과목마다 특화된 도구로, 지문 분석과 단어 하이라이트부터 함수 그래프 시각화까지 딱 맞게 배웁니다."
             />
             <StoryFeature
               icon={<Users className="h-7 w-7" />}
@@ -265,14 +265,22 @@ export default function Home() {
         >
           지금 바로 골라서 학습을 시작해 보세요.
         </p>
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <SubjectCard
+            href="/korean"
+            emoji="📖"
+            title="국어"
+            description="지문 분석 및 어휘·문학 감상 학습"
+            detail="AI가 지문의 주제·정서·표현을 분석하고 어휘 풀이를 도와줍니다."
+            delay="reveal-delay-1"
+          />
           <SubjectCard
             href="/english"
             emoji="📚"
             title="영어"
             description="어려운 단어 학습 및 독해 능력 향상"
             detail="AI가 감지한 어려운 단어를 하이라이트하고 한국어 뜻을 제공합니다."
-            delay="reveal-delay-1"
+            delay="reveal-delay-2"
           />
           <SubjectCard
             href="/math"
@@ -280,14 +288,14 @@ export default function Home() {
             title="수학"
             description="함수식 시각화 및 동적 그래프 학습"
             detail="수학 함수를 동적 그래프로 시각화하고 계수를 변경하며 학습합니다."
-            delay="reveal-delay-2"
+            delay="reveal-delay-3"
           />
           <SubjectCard
-            href="/chemistry"
-            emoji="⚗️"
-            title="화학"
-            description="화학 개념 정리 및 퀴즈 학습"
-            detail="화학 교재를 분석하여 백지 퀴즈로 학습 효과를 극대화합니다."
+            href="/science"
+            emoji="🔬"
+            title="탐구"
+            description="과학·사회 탐구 개념 정리 및 퀴즈 학습"
+            detail="탐구 교재를 분석해 핵심 개념을 정리하고 백지 퀴즈로 복습합니다."
             delay="reveal-delay-3"
           />
         </div>
@@ -341,6 +349,11 @@ export default function Home() {
               <h4 className="mb-4 font-semibold text-white">학습</h4>
               <ul className="space-y-2 text-sm">
                 <li>
+                  <Link href="/korean" className="hover:text-white">
+                    국어
+                  </Link>
+                </li>
+                <li>
                   <Link href="/english" className="hover:text-white">
                     영어
                   </Link>
@@ -351,8 +364,8 @@ export default function Home() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/chemistry" className="hover:text-white">
-                    화학
+                  <Link href="/science" className="hover:text-white">
+                    탐구
                   </Link>
                 </li>
               </ul>

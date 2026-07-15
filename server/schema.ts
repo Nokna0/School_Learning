@@ -50,7 +50,7 @@ export const materials = mysqlTable(
     fileUrl: text("file_url").notNull(),
     fileKey: varchar("file_key", { length: 255 }).notNull().unique(),
     fileSize: int("file_size").notNull(),
-    subject: mysqlEnum("subject", ["math", "english", "chemistry"]).notNull(),
+    subject: mysqlEnum("subject", ["math", "english", "science", "korean"]).notNull(),
     // 문제/답지 수동 지정. null이면 파일명으로 자동 추정한다.
     role: mysqlEnum("role", ["question", "answer"]),
     createdAt: datetime("created_at")
@@ -73,7 +73,7 @@ export const studyRecords = mysqlTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     userId: varchar("user_id", { length: 36 }).notNull(),
     materialId: varchar("material_id", { length: 36 }),
-    subject: mysqlEnum("subject", ["math", "english", "chemistry"]).notNull(),
+    subject: mysqlEnum("subject", ["math", "english", "science", "korean"]).notNull(),
     duration: int("duration").notNull(), // in minutes
     score: decimal("score", { precision: 5, scale: 2 }), // percentage 0-100
     notes: text("notes"),
@@ -95,7 +95,7 @@ export const quizSessions = mysqlTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     userId: varchar("user_id", { length: 36 }).notNull(),
     materialId: varchar("material_id", { length: 36 }),
-    subject: mysqlEnum("subject", ["math", "english", "chemistry"]).notNull(),
+    subject: mysqlEnum("subject", ["math", "english", "science", "korean"]).notNull(),
     questionCount: int("question_count").notNull(),
     score: decimal("score", { precision: 5, scale: 2 }).notNull(),
     completedAt: datetime("completed_at").notNull(),
@@ -191,9 +191,7 @@ export const studyStatistics = mysqlTable(
       precision: 5,
       scale: 2,
     }).default("0"),
-    mathMinutes: int("math_minutes").default(0),
-    englishMinutes: int("english_minutes").default(0),
-    chemistryMinutes: int("chemistry_minutes").default(0),
+    // 과목별 학습 시간은 study_records 에서 집계하므로 별도 컬럼을 두지 않는다.
     lastStudiedAt: datetime("last_studied_at"),
     createdAt: datetime("created_at")
       .default(sql`CURRENT_TIMESTAMP`)

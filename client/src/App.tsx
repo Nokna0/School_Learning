@@ -9,9 +9,10 @@ import AccountPage from "@/pages/AccountPage";
 import SubjectSelectPage from "@/pages/SubjectSelectPage";
 import MathStudyPage from "@/pages/MathStudyPage";
 import EnglishStudyPage from "@/pages/EnglishStudyPage";
-import ChemistryStudyPage from "@/pages/ChemistryStudyPage";
+import ScienceStudyPage from "@/pages/ScienceStudyPage";
+import KoreanStudyPage from "@/pages/KoreanStudyPage";
 import StudyRecordsPage from "@/pages/StudyRecordsPage";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -40,11 +41,16 @@ function Router() {
       <Route path="/subjects" component={SubjectSelectPage} />
       <Route path="/math" component={MathStudyPage} />
       <Route path="/english" component={EnglishStudyPage} />
-      <Route path="/chemistry" component={ChemistryStudyPage} />
+      <Route path="/science" component={ScienceStudyPage} />
+      <Route path="/korean" component={KoreanStudyPage} />
+      {/* 화학 → 탐구 경로 변경 호환 */}
+      <Route path="/chemistry">{() => <Redirect to="/science" />}</Route>
       {/* 과거 /study/* 경로 호환 */}
       <Route path="/study/math" component={MathStudyPage} />
       <Route path="/study/english" component={EnglishStudyPage} />
-      <Route path="/study/chemistry" component={ChemistryStudyPage} />
+      <Route path="/study/science" component={ScienceStudyPage} />
+      <Route path="/study/korean" component={KoreanStudyPage} />
+      <Route path="/study/chemistry">{() => <Redirect to="/science" />}</Route>
       <Route path="/records" component={StudyRecordsPage} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}

@@ -26,10 +26,11 @@ describe("tRPC Router Configuration", () => {
   });
 
   it("should validate subject enum", () => {
-    const subjectSchema = z.enum(["math", "english", "chemistry"]);
+    const subjectSchema = z.enum(["math", "english", "science", "korean"]);
 
     expect(subjectSchema.safeParse("math").success).toBe(true);
-    expect(subjectSchema.safeParse("physics").success).toBe(false);
+    expect(subjectSchema.safeParse("korean").success).toBe(true);
+    expect(subjectSchema.safeParse("chemistry").success).toBe(false);
   });
 });
 
@@ -37,7 +38,7 @@ describe("API Request Validation", () => {
   it("should validate quiz generation input", () => {
     const quizSchema = z.object({
       pdfText: z.string().min(10),
-      subject: z.enum(["math", "english", "chemistry"]),
+      subject: z.enum(["math", "english", "science", "korean"]),
     });
 
     const validInput = {
@@ -52,7 +53,7 @@ describe("API Request Validation", () => {
   it("should reject quiz input with empty text", () => {
     const quizSchema = z.object({
       pdfText: z.string().min(10),
-      subject: z.enum(["math", "english", "chemistry"]),
+      subject: z.enum(["math", "english", "science", "korean"]),
     });
 
     const invalidInput = {
@@ -98,16 +99,21 @@ describe("Data Transformation", () => {
 describe("Subject Classification", () => {
   it("should identify math subject", () => {
     const subject = "math";
-    expect(["math", "english", "chemistry"]).toContain(subject);
+    expect(["math", "english", "science", "korean"]).toContain(subject);
   });
 
   it("should identify english subject", () => {
     const subject = "english";
-    expect(["math", "english", "chemistry"]).toContain(subject);
+    expect(["math", "english", "science", "korean"]).toContain(subject);
   });
 
-  it("should identify chemistry subject", () => {
-    const subject = "chemistry";
-    expect(["math", "english", "chemistry"]).toContain(subject);
+  it("should identify science subject", () => {
+    const subject = "science";
+    expect(["math", "english", "science", "korean"]).toContain(subject);
+  });
+
+  it("should identify korean subject", () => {
+    const subject = "korean";
+    expect(["math", "english", "science", "korean"]).toContain(subject);
   });
 });

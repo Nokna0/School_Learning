@@ -8,7 +8,7 @@ import type { SubjectKey } from "@/lib/subjects";
 /**
  * PDF 업로드. 파일 선택/드래그앤드롭 → Cloudinary 업로드(/api/upload) → DB 저장(materials.upload)
  * → materials.list 캐시 무효화까지 한 번에 처리한다. 업로드 로직은 useMaterialUpload 훅에서 온다.
- * 과목 페이지(영어/수학/화학)가 공통으로 사용한다.
+ * 과목 페이지(국어/영어/수학/탐구)가 공통으로 사용한다.
  *
  * mode="dropzone": 드래그앤드롭을 받는 넓은 영역(사이드바용).
  * mode="button": 컴팩트 버튼만(헤더용).
