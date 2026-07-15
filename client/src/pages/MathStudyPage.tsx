@@ -8,9 +8,7 @@ import { toast } from "sonner";
 import MathVisualizer from "@/components/MathVisualizer";
 import StudyShell from "@/components/study/StudyShell";
 import PdfViewer, { type PdfViewerHandle } from "@/components/study/PdfViewer";
-
-// 답지로 인식할 파일명 규칙. 파일명에 아래 단어가 포함되면 답지로 취급한다.
-const ANSWER_FILE_PATTERN = /답지|정답|해설|풀이|dapzi|answer|solution/i;
+import { useAnswerSheet } from "@/hooks/useAnswerSheet";
 
 // data URL 접두사를 떼고 순수 base64만 남긴다(서버가 접두사를 다시 붙인다).
 const rawBase64 = (dataUrl: string) => dataUrl.replace(/^data:image\/\w+;base64,/, "");
@@ -20,6 +18,7 @@ interface StudyMaterial {
   fileName: string;
   fileUrl: string;
   subject: string;
+  role?: "question" | "answer" | null;
 }
 
 interface QuestionHelpResult {
@@ -47,9 +46,6 @@ export default function MathStudyPage() {
   const [answerExplanation, setAnswerExplanation] = useState("");
   const [answerAnalyzing, setAnswerAnalyzing] = useState(false);
 
-  const [isAnswerMode, setIsAnswerMode] = useState(false);
-  const [mainMaterial, setMainMaterial] = useState<StudyMaterial | null>(null);
-
   const [questionHelp, setQuestionHelp] = useState<QuestionHelpResult | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [guideExpanded, setGuideExpanded] = useState(false);
@@ -60,8 +56,15 @@ export default function MathStudyPage() {
 
   const { data: materialsData } = trpc.materials.list.useQuery({ subject: "math" });
   const materials: StudyMaterial[] = Array.isArray(materialsData) ? materialsData : [];
-  // 답지는 메인 목록에서 숨긴다.
-  const listMaterials = materials.filter((m) => !ANSWER_FILE_PATTERN.test(m.fileName));
+
+  // 문제/답지 수동 지정 + 전환(세 과목 공통 훅).
+  const { visibleMaterials, mode, setMode, isAnswerMode, handleSelect, designate } =
+    useAnswerSheet<StudyMaterial>({
+      materials,
+      selected: selectedMaterial,
+      setSelected: setSelectedMaterial,
+      setPage: setCurrentPage,
+    });
 
   const questionHelpMutation = trpc.mathAssist.questionHelp.useMutation();
   const saveFormulaMutation = trpc.studyRecords.saveMathFormula.useMutation({
@@ -173,47 +176,9 @@ export default function MathStudyPage() {
     }
   };
 
-  /* ===== 답지 토글 ===== */
-  const handleToggleAnswer = () => {
-    const answer = materials.find((m) => ANSWER_FILE_PATTERN.test(m.fileName));
-    if (!answer) {
-      toast.error(
-        "답지 파일이 없습니다. 파일명에 '답지' 또는 '해설'이 포함된 PDF를 업로드하세요.",
-      );
-      return;
-    }
-    if (!isAnswerMode) {
-      if (selectedMaterial) setMainMaterial(selectedMaterial);
-      setSelectedMaterial(answer);
-      setIsAnswerMode(true);
-    } else {
-      if (mainMaterial) setSelectedMaterial(mainMaterial);
-      setIsAnswerMode(false);
-    }
-    setCurrentPage(1);
-    setAnswerExplanation("");
-  };
-
-  const handleSelect = (m: StudyMaterial) => {
-    setSelectedMaterial(m);
-    setMainMaterial(m);
-    setIsAnswerMode(false);
-    setCurrentPage(1);
-  };
-
   /* ===== 우측 도구 패널 ===== */
   const tools = (
     <div className="space-y-3">
-      {selectedMaterial && (
-        <Button
-          onClick={handleToggleAnswer}
-          variant={isAnswerMode ? "default" : "outline"}
-          className="w-full"
-        >
-          {isAnswerMode ? "문제 보기" : "답지 보기"}
-        </Button>
-      )}
-
       <Button
         className="w-full bg-indigo-600 hover:bg-indigo-700"
         onClick={analyzeSelection}
@@ -349,7 +314,7 @@ export default function MathStudyPage() {
     <>
       <StudyShell
         subject="math"
-        materials={listMaterials}
+        materials={visibleMaterials}
         selectedMaterial={selectedMaterial}
         onSelect={(m) => handleSelect(m as StudyMaterial)}
         page={currentPage}
@@ -357,6 +322,9 @@ export default function MathStudyPage() {
         onPageChange={setCurrentPage}
         tools={tools}
         emptyHint="업로드된 교재가 없습니다."
+        mode={mode}
+        onModeChange={setMode}
+        onDesignate={(m, role) => designate(m as StudyMaterial, role)}
       >
         {selectedMaterial ? (
           <PdfViewer

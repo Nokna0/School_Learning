@@ -15,6 +15,13 @@
       "when": 1784074958463,
       "tag": "0001_open_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1784105805854,
+      "tag": "0002_new_wind_dancer",
+      "breakpoints": true
     }
   ]
 }

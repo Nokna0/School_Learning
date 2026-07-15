@@ -51,6 +51,8 @@ export const materials = mysqlTable(
     fileKey: varchar("file_key", { length: 255 }).notNull().unique(),
     fileSize: int("file_size").notNull(),
     subject: mysqlEnum("subject", ["math", "english", "chemistry"]).notNull(),
+    // 문제/답지 수동 지정. null이면 파일명으로 자동 추정한다.
+    role: mysqlEnum("role", ["question", "answer"]),
     createdAt: datetime("created_at")
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),

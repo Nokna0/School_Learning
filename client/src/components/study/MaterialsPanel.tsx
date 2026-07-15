@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { FileText, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { FileCheck2, FileText, FileX2, Pencil, Trash2 } from "lucide-react";
+import type { MaterialRole } from "@/hooks/useAnswerSheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +24,7 @@ export interface StudyMaterialLite {
   fileName: string;
   fileUrl: string;
   subject: string;
+  role?: MaterialRole | null;
 }
 
 // 파일명에서 .pdf 확장자를 숨긴다.
@@ -35,15 +38,26 @@ export default function MaterialsPanel({
   selectedId,
   onSelect,
   emptyHint = "업로드된 파일이 없습니다.",
+  mode = "question",
+  onDesignate,
 }: {
   subject: SubjectKey;
   materials: StudyMaterialLite[];
   selectedId?: string | null;
   onSelect: (m: StudyMaterialLite) => void;
   emptyHint?: string;
+  /** 현재 목록이 문제/답지 중 무엇을 보여주는지. 역할 지정 버튼 방향을 결정한다. */
+  mode?: MaterialRole;
+  /** 자료를 문제↔답지로 수동 지정. */
+  onDesignate?: (m: StudyMaterialLite, role: MaterialRole) => void;
 }) {
   const utils = trpc.useUtils();
   const [pendingDelete, setPendingDelete] = useState<StudyMaterialLite | null>(null);
+
+  // 인라인 이름 편집 상태
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const deleteMutation = trpc.materials.delete.useMutation({
     onSuccess: async () => {
@@ -52,6 +66,33 @@ export default function MaterialsPanel({
     },
     onError: (e) => toast.error(`삭제 실패: ${e.message}`),
   });
+
+  const renameMutation = trpc.materials.rename.useMutation({
+    onSuccess: async () => {
+      await utils.materials.list.invalidate();
+    },
+    onError: (e) => toast.error(`이름 변경 실패: ${e.message}`),
+  });
+
+  const startEditing = (m: StudyMaterialLite) => {
+    setEditingId(m.id);
+    setDraftName(displayName(m.fileName));
+    // 입력창이 마운트된 뒤 포커스/전체선택
+    requestAnimationFrame(() => inputRef.current?.select());
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setDraftName("");
+  };
+
+  const commitEditing = (m: StudyMaterialLite) => {
+    const trimmed = draftName.trim();
+    cancelEditing();
+    if (!trimmed || trimmed === displayName(m.fileName)) return;
+    // 표시명만 편집하므로 확장자(.pdf)를 다시 붙여 저장한다.
+    renameMutation.mutate({ id: m.id, fileName: `${trimmed}.pdf` });
+  };
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -63,31 +104,89 @@ export default function MaterialsPanel({
         ) : (
           materials.map((m) => {
             const active = m.id === selectedId;
+            const editing = m.id === editingId;
             return (
               <div
                 key={m.id}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (editing) return;
+                  if (e.key === "F2") {
+                    e.preventDefault();
+                    startEditing(m);
+                  }
+                }}
                 className={cn(
-                  "group flex items-center gap-2 rounded-lg border p-2 transition-colors",
+                  "group flex items-center gap-2 rounded-lg border p-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-400",
                   active ? "border-indigo-500 bg-indigo-50" : "hover:bg-muted",
                 )}
               >
-                <button
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                  onClick={() => onSelect(m)}
-                  title={displayName(m.fileName)}
-                >
-                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate text-sm">{displayName(m.fileName)}</span>
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
-                  onClick={() => setPendingDelete(m)}
-                  title="삭제"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {editing ? (
+                  <Input
+                    ref={inputRef}
+                    value={draftName}
+                    autoFocus
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onBlur={() => commitEditing(m)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitEditing(m);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelEditing();
+                      }
+                    }}
+                    className="h-7 flex-1 text-sm"
+                  />
+                ) : (
+                  <>
+                    <button
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => onSelect(m)}
+                      onDoubleClick={() => startEditing(m)}
+                      title="클릭: 열기 · 더블클릭/F2: 이름 수정"
+                    >
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-sm">{displayName(m.fileName)}</span>
+                    </button>
+                    {onDesignate && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-indigo-600"
+                        onClick={() =>
+                          onDesignate(m, mode === "question" ? "answer" : "question")
+                        }
+                        title={mode === "question" ? "답지로 지정" : "문제로 지정"}
+                      >
+                        {mode === "question" ? (
+                          <FileCheck2 className="h-4 w-4" />
+                        ) : (
+                          <FileX2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground"
+                      onClick={() => startEditing(m)}
+                      title="이름 수정 (F2)"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
+                      onClick={() => setPendingDelete(m)}
+                      title="삭제"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             );
           })

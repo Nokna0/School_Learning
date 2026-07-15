@@ -175,3 +175,53 @@
     }
   }
 }
+
+@layer utilities {
+  /* ── 랜딩 페이지 스크롤텔링 ──────────────────────────────
+   * [data-reveal] 요소가 뷰포트에 들어오면 .is-visible 이 붙어
+   * 아래에서 위로 부드럽게 나타난다. Home.tsx의 IntersectionObserver가 토글한다. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(32px);
+    transition:
+      opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  /* 순차 등장을 위한 지연 */
+  .reveal-delay-1 { transition-delay: 0.12s; }
+  .reveal-delay-2 { transition-delay: 0.24s; }
+  .reveal-delay-3 { transition-delay: 0.36s; }
+
+  /* 히어로 장식 요소의 은은한 부유 애니메이션 (패럴랙스 레이어 안쪽 요소에만 적용) */
+  .floaty {
+    animation: float-soft 7s ease-in-out infinite;
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+/* 접근성: 동작 줄이기 설정 시 모든 등장/부유 애니메이션 비활성화
+ * (패럴랙스 transform은 Home.tsx에서 JS로 함께 비활성화한다) */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .floaty {
+    animation: none !important;
+  }
+}

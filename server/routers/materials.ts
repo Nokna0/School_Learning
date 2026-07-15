@@ -46,6 +46,29 @@ export const materialsRouter = router({
       return material;
     }),
 
+  rename: protectedProcedure
+    .input(z.object({ id: z.string().min(1), fileName: z.string().min(1).max(255) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db
+        .update(materials)
+        .set({ fileName: input.fileName })
+        .where(eq(materials.id, input.id));
+      return { renamed: true };
+    }),
+
+  // 문제/답지 역할 수동 지정(기기 간 공유되도록 DB에 저장).
+  setRole: protectedProcedure
+    .input(z.object({ id: z.string().min(1), role: z.enum(["question", "answer"]) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db
+        .update(materials)
+        .set({ role: input.role })
+        .where(eq(materials.id, input.id));
+      return { role: input.role };
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ input }) => {

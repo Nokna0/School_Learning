@@ -1,19 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { apiUrl } from "@/lib/api";
-import { trpc } from "@/lib/trpc";
 import { Loader2, Upload, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-type Subject = "english" | "math" | "chemistry";
-
-// 서버(multer, express.json)의 50MB 제한과 동일하게 맞춘다.
-const MAX_SIZE = 50 * 1024 * 1024;
+import { useMaterialUpload } from "@/hooks/useMaterialUpload";
+import type { SubjectKey } from "@/lib/subjects";
 
 /**
  * PDF 업로드. 파일 선택/드래그앤드롭 → Cloudinary 업로드(/api/upload) → DB 저장(materials.upload)
- * → materials.list 캐시 무효화까지 한 번에 처리한다. 업로드 중 취소(AbortController) 지원.
+ * → materials.list 캐시 무효화까지 한 번에 처리한다. 업로드 로직은 useMaterialUpload 훅에서 온다.
  * 과목 페이지(영어/수학/화학)가 공통으로 사용한다.
  *
  * mode="dropzone": 드래그앤드롭을 받는 넓은 영역(사이드바용).
@@ -26,97 +20,21 @@ export default function MaterialUploadButton({
   mode = "dropzone",
   onUploaded,
 }: {
-  subject: Subject;
+  subject: SubjectKey;
   variant?: React.ComponentProps<typeof Button>["variant"];
   className?: string;
   mode?: "button" | "dropzone";
   onUploaded?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const uploadMutation = trpc.materials.upload.useMutation();
-  const utils = trpc.useUtils();
-
-  const uploadFile = useCallback(
-    async (file: File) => {
-      // 중복 제출 가드: 업로드 중이면 무시한다.
-      if (uploading) return;
-
-      const isPdf =
-        file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-      if (!isPdf) {
-        toast.error("PDF 파일만 업로드할 수 있습니다.");
-        return;
-      }
-      if (file.size > MAX_SIZE) {
-        toast.error("파일이 너무 큽니다. 50MB 이하 PDF만 업로드할 수 있습니다.");
-        return;
-      }
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setUploading(true);
-      const toastId = toast.loading(`"${file.name}" 업로드 중...`);
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("subject", subject);
-
-        const res = await fetch(apiUrl("/api/upload"), {
-          method: "POST",
-          credentials: "include",
-          body: formData,
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          // 서버가 돌려준 실제 원인 메시지를 최대한 표면화한다.
-          let detail = `서버 응답 ${res.status}`;
-          try {
-            const body = await res.json();
-            if (body?.error) detail = body.error;
-          } catch {
-            /* JSON 아니면 무시 */
-          }
-          throw new Error(detail);
-        }
-        const { fileKey, fileUrl } = await res.json();
-
-        await uploadMutation.mutateAsync({
-          subject,
-          fileName: file.name,
-          fileKey,
-          fileUrl,
-          fileSize: file.size,
-        });
-
-        await utils.materials.list.invalidate();
-        toast.success(`"${file.name}" 업로드 완료`, { id: toastId });
-        onUploaded?.();
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          toast.info("업로드를 취소했습니다.", { id: toastId });
-        } else {
-          console.error("Upload error:", err);
-          toast.error(
-            err instanceof Error ? `업로드 실패: ${err.message}` : "업로드에 실패했습니다.",
-            { id: toastId },
-          );
-        }
-      } finally {
-        abortRef.current = null;
-        setUploading(false);
-        if (inputRef.current) inputRef.current.value = "";
-      }
-    },
-    [subject, uploading, uploadMutation, utils, onUploaded],
-  );
+  const { uploadFile, uploading, cancel } = useMaterialUpload(subject, onUploaded);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) void uploadFile(file);
+      if (inputRef.current) inputRef.current.value = "";
     },
     [uploadFile],
   );
@@ -130,8 +48,6 @@ export default function MaterialUploadButton({
     },
     [uploadFile],
   );
-
-  const cancel = () => abortRef.current?.abort();
 
   const hiddenInput = (
     <input

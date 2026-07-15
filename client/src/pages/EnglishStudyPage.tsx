@@ -8,12 +8,14 @@ import { useState, useRef } from "react";
 import BlankQuiz from "@/components/BlankQuiz";
 import StudyShell from "@/components/study/StudyShell";
 import PdfViewer from "@/components/study/PdfViewer";
+import { useAnswerSheet } from "@/hooks/useAnswerSheet";
 
 interface StudyMaterial {
   id: string;
   fileName: string;
   fileUrl: string;
   subject: string;
+  role?: "question" | "answer" | null;
 }
 
 interface WordData {
@@ -51,6 +53,14 @@ export default function EnglishStudyPage() {
   const { data: materialsData } = trpc.materials.list.useQuery({ subject: "english" });
   const materials: StudyMaterial[] = Array.isArray(materialsData) ? materialsData : [];
   const createRecordMutation = trpc.studyRecords.create.useMutation();
+
+  const { visibleMaterials, mode, setMode, handleSelect, designate } =
+    useAnswerSheet<StudyMaterial>({
+      materials,
+      selected: selectedMaterial,
+      setSelected: setSelectedMaterial,
+      setPage: setCurrentPage,
+    });
 
   const handleAnalyzeEnglish = async () => {
     const text = pdfTextRef.current;
@@ -139,17 +149,19 @@ export default function EnglishStudyPage() {
     <>
       <StudyShell
         subject="english"
-        materials={materials}
+        materials={visibleMaterials}
         selectedMaterial={selectedMaterial}
         onSelect={(m) => {
-          setSelectedMaterial(m as StudyMaterial);
-          setCurrentPage(1);
+          handleSelect(m as StudyMaterial);
           setHighlightedWords([]);
         }}
         page={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
         tools={tools}
+        mode={mode}
+        onModeChange={setMode}
+        onDesignate={(m, role) => designate(m as StudyMaterial, role)}
       >
         {selectedMaterial ? (
           <PdfViewer
