@@ -8,6 +8,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import "@/lib/pdf";
 import EnglishHighlighter from "@/components/EnglishHighlighter";
 import BlankQuiz from "@/components/BlankQuiz";
+import MaterialUploadButton from "@/components/MaterialUploadButton";
 import { useState, useEffect, useRef } from "react";
 
 
@@ -197,6 +198,7 @@ export default function EnglishStudyPage() {
             </Link>
             <h1 className="text-2xl font-bold">영어 학습</h1>
           </div>
+          {!selectedMaterial && <MaterialUploadButton subject="english" />}
         </div>
       </div>
 
@@ -209,8 +211,9 @@ export default function EnglishStudyPage() {
                 <Loader2 className="w-6 h-6 animate-spin mx-auto" />
               </div>
             ) : materials.length === 0 ? (
-              <div className="col-span-full text-center py-8 text-muted-foreground">
-                업로드된 파일이 없습니다. 위의 "PDF 업로드" 버튼을 클릭하여 파일을 업로드하세요.
+              <div className="col-span-full flex flex-col items-center gap-4 py-12 text-muted-foreground">
+                <p>업로드된 파일이 없습니다. PDF를 업로드하여 학습을 시작하세요.</p>
+                <MaterialUploadButton subject="english" />
               </div>
             ) : (
               materials.map((material) => (

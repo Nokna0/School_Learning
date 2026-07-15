@@ -6,6 +6,11 @@ import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
 import MathVisualizer from "@/components/MathVisualizer";
+import MaterialUploadButton from "@/components/MaterialUploadButton";
+import { toast } from "sonner";
+
+// 답지로 인식할 파일명 규칙. 파일명에 아래 단어가 포함되면 답지로 취급한다.
+const ANSWER_FILE_PATTERN = /답지|정답|해설|풀이|dapzi|answer|solution/i;
 
 import * as pdfjsLib from "pdfjs-dist";
 import "@/lib/pdf";
@@ -184,7 +189,7 @@ export default function MathStudyPage() {
 
   /* ====================== Vision 분석 ======================= */
   const analyzeSelection = async () => {
-    if (!selectionBox) return alert("드래그 후 실행하세요");
+    if (!selectionBox) return toast.info("분석할 영역을 먼저 드래그하세요.");
 
     const base64 = cropCanvas(canvasRef.current!, selectionBox);
 
@@ -214,7 +219,7 @@ export default function MathStudyPage() {
 
   /* ====================== 문제 접근 가이드 ======================= */
   const analyzeQuestionGuide = async () => {
-    if (!selectionBox) return alert("문제를 드래그하세요.");
+    if (!selectionBox) return toast.info("문제 영역을 먼저 드래그하세요.");
 
     const base64img = cropCanvas(canvasRef.current!, selectionBox);
 
@@ -233,7 +238,7 @@ export default function MathStudyPage() {
 
       if (!text.trim()) {
         setGuideLoading(false);
-        return alert("문장 인식 실패.");
+        return toast.error("문장을 인식하지 못했습니다. 더 선명한 영역을 드래그해 보세요.");
       }
 
       const result = await questionHelpMutation.mutateAsync({ text });
@@ -242,7 +247,7 @@ export default function MathStudyPage() {
       setGuideExpanded(true);
     } catch (e) {
       console.error(e);
-      alert("접근 분석 실패");
+      toast.error("문제 접근 분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setGuideLoading(false);
     }
@@ -251,9 +256,9 @@ export default function MathStudyPage() {
   /* ====================== 답지 상세 설명 ======================= */
   const analyzeAnswerDetail = async () => {
     if (!isAnswerMode)
-      return alert("먼저 '답지 보기'를 누르고 답지에서 영역을 드래그하세요.");
+      return toast.info("먼저 '답지 보기'를 누른 뒤 답지에서 영역을 드래그하세요.");
 
-    if (!selectionBox) return alert("답지에서 설명이 필요한 부분을 드래그하세요.");
+    if (!selectionBox) return toast.info("답지에서 설명이 필요한 부분을 드래그하세요.");
 
     const base64 = cropCanvas(canvasRef.current!, selectionBox).replace(
       /^data:image\/png;base64,/,
@@ -285,7 +290,7 @@ export default function MathStudyPage() {
       );
     } catch (e) {
       console.error(e);
-      alert("답지 상세 설명 실패");
+      toast.error("답지 상세 설명에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setAnswerAnalyzing(false);
     }
@@ -293,8 +298,11 @@ export default function MathStudyPage() {
 
   /* ====================== 답지 토글 ======================= */
   const handleToggleAnswer = () => {
-    const answer = materials.find((m) => m.fileName === "dapzi.pdf");
-    if (!answer) return alert("dapzi.pdf 없음");
+    const answer = materials.find((m) => ANSWER_FILE_PATTERN.test(m.fileName));
+    if (!answer)
+      return toast.error(
+        "답지 파일이 없습니다. 파일명에 '답지' 또는 '해설'이 포함된 PDF를 업로드하세요.",
+      );
 
     if (!isAnswerMode) {
       if (selectedMaterial) setMainMaterial(selectedMaterial);
@@ -413,8 +421,16 @@ export default function MathStudyPage() {
               <CardTitle className="text-2xl font-bold">저장된 파일</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-lg">
+              <MaterialUploadButton subject="math" className="w-full" />
+
+              {materials.filter((m) => !ANSWER_FILE_PATTERN.test(m.fileName)).length === 0 && (
+                <p className="text-sm text-muted-foreground pt-2">
+                  업로드된 교재가 없습니다.
+                </p>
+              )}
+
               {materials
-                .filter((m) => m.fileName !== "dapzi.pdf")
+                .filter((m) => !ANSWER_FILE_PATTERN.test(m.fileName))
                 .map((m) => (
                   <button
                     key={m.id}

@@ -2,7 +2,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import Home from "@/pages/Home";
-import StudyPage from "@/pages/StudyPage";
 import MathStudyPage from "@/pages/MathStudyPage";
 import EnglishStudyPage from "@/pages/EnglishStudyPage";
 import ChemistryStudyPage from "@/pages/ChemistryStudyPage";
@@ -18,10 +17,10 @@ function Router() {
       <Route path="/math" component={MathStudyPage} />
       <Route path="/english" component={EnglishStudyPage} />
       <Route path="/chemistry" component={ChemistryStudyPage} />
+      {/* 과거 /study/* 경로 호환 */}
       <Route path="/study/math" component={MathStudyPage} />
       <Route path="/study/english" component={EnglishStudyPage} />
       <Route path="/study/chemistry" component={ChemistryStudyPage} />
-      <Route path="/study/:subject" component={StudyPage} />
       <Route path="/records" component={StudyRecordsPage} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}

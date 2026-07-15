@@ -2,7 +2,7 @@
 
 EduTech(School_Learning) 프로젝트의 구조, 배포 아키텍처, 그리고 무료 배포에 이르기까지의 의사결정 기록.
 
-> 최종 갱신: 2026-07-14
+> 최종 갱신: 2026-07-15
 > 라이브: 프론트 <https://nokchamaru.netlify.app> / API <https://edutech-api-sh3f.onrender.com>
 
 ---
@@ -54,13 +54,13 @@ School_Learning/
 │       │   └── utils.ts
 │       ├── pages/
 │       │   ├── Home.tsx
-│       │   ├── StudyPage.tsx           # 자료 업로드/선택
-│       │   ├── MathStudyPage.tsx       # PDF 렌더 → OCR → 수식 분석
+│       │   ├── MathStudyPage.tsx       # PDF 렌더 → OCR → 수식 분석 + 답지 모드
 │       │   ├── EnglishStudyPage.tsx    # 지문 분석 → 단어 → 퀴즈
 │       │   ├── ChemistryStudyPage.tsx  # 퀴즈 생성
 │       │   ├── StudyRecordsPage.tsx    # 기록/통계
 │       │   └── NotFound.tsx
 │       ├── components/
+│       │   ├── MaterialUploadButton.tsx # ★ 공용 PDF 업로드 버튼 (세 과목 공통)
 │       │   ├── EnglishHighlighter.tsx  # 단어 하이라이트 + 정의 조회
 │       │   ├── BlankQuiz.tsx
 │       │   ├── MathVisualizer.tsx
@@ -288,6 +288,42 @@ pnpm build     # 클라이언트 + 서버 번들
 
 ---
 
+## 9-b. 프론트엔드 진단 리포트 대응 (2026-07-15)
+
+배포 후 Chrome으로 각 페이지를 실제 조작한 진단 리포트에서 8건이 나왔다. 전부 수정함.
+
+### 핵심 원인: 업로드 UI가 죽은 라우트에 갇혀 있었다
+
+- 업로드 기능은 **오직 `StudyPage`에만** 있었는데, `App.tsx`에서 `/study/:subject` 라우트가
+  `/study/math|english|chemistry` 명시 라우트 **아래**에 있어 **영원히 도달 불가**였다.
+- 실제 사용자가 가는 과목 페이지(`EnglishStudyPage` 등)에는 업로드 UI가 아예 없었다.
+  그래서 "PDF 업로드 버튼을 클릭하세요"라는 안내만 뜨고 **버튼은 존재하지 않는** 상태.
+- 결과: 세 과목 모두 첫 단계인 업로드가 불가능 → 서비스의 핵심 흐름이 시작조차 안 됨.
+
+### 수정 내역 (리포트 번호 기준)
+
+| # | 문제 | 수정 |
+|---|---|---|
+| 1·2 | 업로드 버튼 없음 (핵심 기능 불가) | 공용 `components/MaterialUploadButton.tsx` 신설 → 세 과목 페이지 헤더·빈 목록·수학 사이드바에 연결. `/api/upload` → `materials.upload` → `materials.list` 무효화까지 처리 |
+| 3 | 수학 분석 버튼 무반응 | 파일 없으면 버튼 `disabled`(업로드 복구로 해소), 선택 후 드래그 없이 누르면 `toast.info` 안내 |
+| 4 | `dapzi.pdf` 파일명 하드코딩 | 정규식 `ANSWER_FILE_PATTERN`(`답지|정답|해설|풀이|dapzi|answer|solution`)으로 일반화. 답지 탐지·목록 필터 양쪽 적용 |
+| 5 | 오류를 `alert()`로 표시 | 전부 sonner `toast`로 교체 (`alert` 0건 확인) |
+| 6 | 404 페이지만 영어 | 한글화 (`NotFound.tsx`) |
+| 7 | 푸터 링크 `href="#"` 미동작 | 버튼 + "준비 중" 토스트로 교체 (페이지 최상단 점프 제거). **단, 이용약관/개인정보 실제 문서는 미작성 — 별도 과제** |
+| 8 | 콜드스타트 리스크 | 업로드에 `toast.loading` 피드백 추가. 기존 로딩 스피너 + TanStack Query 기본 3회 재시도로 커버 (쿼리 계층은 안 건드림) |
+| — | 죽은 코드 | 도달 불가 `StudyPage.tsx` 삭제, `App.tsx` 라우팅 정리 (`storage.ts`는 트리셰이킹으로 번들에서 빠지므로 존치) |
+
+### 검증
+
+- `tsc --noEmit` 통과, 프로덕션 빌드 성공.
+- 번들 크기: 변경 후 index 696KB로 **원본(702KB)보다 작음** — `StudyPage` 삭제 효과.
+  (세션 초기 로그의 427KB는 당시 node_modules 해석 상태였고 코드와 무관.)
+- 업로드 서버 체인은 §11에서 이미 실측 완료. 새 컴포넌트는 그 체인을 그대로 호출.
+- **미검증**: 브라우저에서의 실제 버튼 클릭·PDF 렌더링은 코드 검증(타입체크·훅 규칙·Provider 범위)까지만.
+  배포 후 Chrome으로 육안 확인 권장.
+
+---
+
 ## 10. 삽질 기록 (같은 실수 반복 방지)
 
 | 증상 | 진짜 원인 |
@@ -363,3 +399,9 @@ VPS를 쓴다면 **RAM 2GB 이상** 필요하다 (Vite 빌드 + MySQL 동시 실
 - **`file_key`는 UNIQUE.** 같은 키로 두 번 저장하면 실패한다.
 - **TiDB 클러스터를 새로 만들지 말 것.** 기존 `edutech` 클러스터(싱가포르)에 테이블 8개가 이미 있다.
 - `tsconfig.json`에 `"ignoreDeprecations": "6.0"`을 넣으면 **TS 5.9가 거부해서 타입체크 전체가 깨진다.** (한 번 들어왔다가 제거함)
+- **수학 답지 파일은 파일명 규칙으로 인식한다.** 파일명에 `답지/정답/해설/풀이/answer/solution` 등이 포함돼야
+  "답지 보기"가 동작한다 (`MathStudyPage.tsx`의 `ANSWER_FILE_PATTERN`). 예전 `dapzi.pdf` 하드코딩은 제거됨.
+- **모든 업로드는 `MaterialUploadButton`을 거친다.** 새 업로드 진입점을 만들 때 fetch를 직접 짜지 말고
+  이 컴포넌트를 재사용할 것 (Cloudinary 업로드 + DB 저장 + 캐시 무효화가 한 곳에 있다).
+- **미완성 과제: 이용약관·개인정보 처리방침 실제 문서.** 학생 대상 서비스라 필요하나 현재는 푸터에서
+  "준비 중" 토스트로만 처리돼 있다.

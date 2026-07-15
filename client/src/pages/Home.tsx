@@ -2,8 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { BookOpen, Zap, Users, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Home() {
+  // 아직 별도 페이지/문서가 없는 항목. 클릭 시 안내만 표시한다.
+  const notReady = () => toast("준비 중인 기능입니다.");
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
       {/* Navigation */}
@@ -213,16 +217,16 @@ export default function Home() {
             <div>
               <h4 className="text-white font-semibold mb-4">정보</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">소개</a></li>
-                <li><a href="#" className="hover:text-white">기능</a></li>
-                <li><a href="#" className="hover:text-white">연락처</a></li>
+                <li><button type="button" onClick={notReady} className="hover:text-white">소개</button></li>
+                <li><button type="button" onClick={notReady} className="hover:text-white">기능</button></li>
+                <li><button type="button" onClick={notReady} className="hover:text-white">연락처</button></li>
               </ul>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-4">법률</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white">이용약관</a></li>
-                <li><a href="#" className="hover:text-white">개인정보</a></li>
+                <li><button type="button" onClick={notReady} className="hover:text-white">이용약관</button></li>
+                <li><button type="button" onClick={notReady} className="hover:text-white">개인정보</button></li>
               </ul>
             </div>
           </div>
