@@ -54,7 +54,6 @@ export default function MathStudyPage() {
   const [savedFormulas, setSavedFormulas] = useState<Set<string>>(new Set());
 
   const viewerRef = useRef<PdfViewerHandle>(null);
-  const pdfTextRef = useRef("");
 
   const { data: materialsData } = trpc.materials.list.useQuery({ subject: "math" });
   const materials: StudyMaterial[] = Array.isArray(materialsData) ? materialsData : [];
@@ -84,10 +83,11 @@ export default function MathStudyPage() {
     setHasSelection(false);
   }, [selectedMaterial, currentPage]);
 
-  const requireSelection = () => {
-    const cropped = viewerRef.current?.cropSelection();
+  // 드래그 영역이 있으면 그 부분을, 없으면 페이지 전체를 이미지로 가져온다.
+  const getRegionOrPage = () => {
+    const cropped = viewerRef.current?.cropSelectionOrFullPage();
     if (!cropped) {
-      toast.info("분석할 영역을 먼저 드래그하세요.");
+      toast.info("먼저 교재를 선택하세요.");
       return null;
     }
     return cropped;
@@ -95,7 +95,7 @@ export default function MathStudyPage() {
 
   /* ===== 수식 분석 ===== */
   const analyzeSelection = async () => {
-    const cropped = requireSelection();
+    const cropped = getRegionOrPage();
     if (!cropped) return;
     setAnalyzing(true);
     try {
@@ -123,7 +123,7 @@ export default function MathStudyPage() {
 
   /* ===== 문제 접근 가이드 ===== */
   const analyzeQuestionGuide = async () => {
-    const cropped = requireSelection();
+    const cropped = getRegionOrPage();
     if (!cropped) return;
     setGuideLoading(true);
     try {
@@ -157,7 +157,7 @@ export default function MathStudyPage() {
       toast.info("먼저 '답지 보기'를 누른 뒤 답지에서 영역을 드래그하세요.");
       return;
     }
-    const cropped = requireSelection();
+    const cropped = getRegionOrPage();
     if (!cropped) return;
     setAnswerAnalyzing(true);
     try {
@@ -189,7 +189,7 @@ export default function MathStudyPage() {
         {analyzing ? (
           <><Loader2 className="mr-2 h-4 w-4 animate-spin" />분석 중...</>
         ) : (
-          <><Zap className="mr-2 h-4 w-4" />드래그 영역 수식 분석</>
+          <><Zap className="mr-2 h-4 w-4" />{hasSelection ? "드래그 영역 수식 분석" : "페이지 수식 분석"}</>
         )}
       </Button>
 
@@ -217,9 +217,10 @@ export default function MathStudyPage() {
         )}
       </Button>
 
-      {!hasSelection && selectedMaterial && (
+      {selectedMaterial && (
         <p className="text-xs text-muted-foreground">
-          PDF에서 분석할 영역을 드래그로 선택하세요. 빈 곳을 클릭하면 선택이 해제됩니다.
+          PDF에서 원하는 부분을 드래그하면 그 영역만, 드래그하지 않으면 페이지 전체를 분석합니다.
+          빈 곳을 클릭하면 선택이 해제됩니다.
         </p>
       )}
 
@@ -313,7 +314,7 @@ export default function MathStudyPage() {
       <div className="border-t pt-3">
         <SharedStudyTools
           subject="math"
-          getText={() => pdfTextRef.current}
+          getText={() => viewerRef.current?.getText() ?? ""}
           hasMaterial={!!selectedMaterial}
         />
       </div>
@@ -342,7 +343,6 @@ export default function MathStudyPage() {
             fileUrl={selectedMaterial.fileUrl}
             page={currentPage}
             onTotalPages={setTotalPages}
-            onText={(t) => (pdfTextRef.current = t)}
             enableSelection
             onSelectionChange={setHasSelection}
           />

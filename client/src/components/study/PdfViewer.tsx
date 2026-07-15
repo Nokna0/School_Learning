@@ -20,6 +20,16 @@ const CLICK_THRESHOLD = 4;
 export interface PdfViewerHandle {
   /** 현재 드래그 선택 영역을 PNG base64로 크롭. 선택이 없으면 null. */
   cropSelection: () => string | null;
+  /** 드래그 선택 영역이 있으면 그 부분을, 없으면 페이지 전체를 PNG base64로. */
+  cropSelectionOrFullPage: () => string | null;
+  /** 드래그 선택 영역에 걸치는 텍스트만 추출. 선택이 없거나 텍스트가 없으면 null. */
+  getSelectedText: () => string | null;
+  /** 현재 페이지 전체 텍스트. */
+  getPageText: () => string;
+  /** 드래그 선택 영역이 있으면 그 텍스트를, 없으면 페이지 전체 텍스트를 반환. */
+  getText: () => string;
+  /** 유효한 드래그 선택이 있는지. */
+  hasSelection: () => boolean;
   /** 드래그 선택 영역 초기화. */
   clearSelection: () => void;
 }
@@ -31,19 +41,26 @@ interface SelectionBox {
   height: number;
 }
 
+// 페이지의 텍스트 아이템 하나. 좌표는 캔버스 버퍼(px) 기준.
+interface TextItemBox {
+  str: string;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 interface PdfViewerProps {
   fileUrl: string;
   page: number;
   onTotalPages?: (n: number) => void;
-  /** 현재 페이지 텍스트 추출(국어/영어/탐구 등 텍스트 분석용). */
-  onText?: (text: string) => void;
-  /** 드래그로 영역 선택 활성화(수학용). */
+  /** 드래그로 영역 선택 활성화. */
   enableSelection?: boolean;
   onSelectionChange?: (hasSelection: boolean) => void;
 }
 
 const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(function PdfViewer(
-  { fileUrl, page, onTotalPages, onText, enableSelection, onSelectionChange },
+  { fileUrl, page, onTotalPages, enableSelection, onSelectionChange },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +74,10 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(function PdfViewer
   );
   const hoveringRef = useRef(false);
 
+  // 현재 페이지의 텍스트(전체) + 아이템별 위치. 영역 텍스트 추출에 쓴다.
+  const pageTextRef = useRef("");
+  const textItemsRef = useRef<TextItemBox[]>([]);
+
   const [scale, setScale] = useState(DEFAULT_SCALE);
 
   // 드래그 선택 상태
@@ -64,32 +85,91 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(function PdfViewer
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  useImperativeHandle(ref, () => ({
-    cropSelection: () => {
+  useImperativeHandle(ref, () => {
+    // 선택 영역을 캔버스 버퍼 좌표계(px)로 환산. 유효한 선택이 없으면 null.
+    const selectionInCanvas = () => {
       const canvas = canvasRef.current;
       const wrapper = wrapperRef.current;
-      if (!canvas || !wrapper || !selection || selection.width < CLICK_THRESHOLD) {
+      if (
+        !canvas ||
+        !wrapper ||
+        !selection ||
+        selection.width < CLICK_THRESHOLD ||
+        selection.height < CLICK_THRESHOLD
+      ) {
         return null;
       }
       // 래퍼는 캔버스를 꼭 감싸므로 좌표계가 동일하다.
       const scaleX = canvas.width / wrapper.clientWidth;
       const scaleY = canvas.height / wrapper.clientHeight;
-      const sx = selection.left * scaleX;
-      const sy = selection.top * scaleY;
-      const sw = selection.width * scaleX;
-      const sh = selection.height * scaleY;
+      return {
+        left: selection.left * scaleX,
+        top: selection.top * scaleY,
+        width: selection.width * scaleX,
+        height: selection.height * scaleY,
+      };
+    };
 
+    const cropRegion = () => {
+      const canvas = canvasRef.current;
+      const box = selectionInCanvas();
+      if (!canvas || !box) return null;
       const temp = document.createElement("canvas");
-      temp.width = Math.max(1, Math.round(sw));
-      temp.height = Math.max(1, Math.round(sh));
-      temp.getContext("2d")!.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      temp.width = Math.max(1, Math.round(box.width));
+      temp.height = Math.max(1, Math.round(box.height));
+      temp
+        .getContext("2d")!
+        .drawImage(
+          canvas,
+          box.left,
+          box.top,
+          box.width,
+          box.height,
+          0,
+          0,
+          box.width,
+          box.height,
+        );
       return temp.toDataURL("image/png");
-    },
-    clearSelection: () => {
-      setSelection(null);
-      onSelectionChange?.(false);
-    },
-  }));
+    };
+
+    const selectedText = () => {
+      const box = selectionInCanvas();
+      if (!box) return null;
+      const right = box.left + box.width;
+      const bottom = box.top + box.height;
+      // 아이템 중심점이 선택 사각형 안에 들면 포함.
+      const picked = textItemsRef.current.filter((it) => {
+        const cx = (it.left + it.right) / 2;
+        const cy = (it.top + it.bottom) / 2;
+        return cx >= box.left && cx <= right && cy >= box.top && cy <= bottom;
+      });
+      const text = picked
+        .map((it) => it.str)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return text || null;
+    };
+
+    return {
+      cropSelection: cropRegion,
+      cropSelectionOrFullPage: () => {
+        const cropped = cropRegion();
+        if (cropped) return cropped;
+        const canvas = canvasRef.current;
+        return canvas ? canvas.toDataURL("image/png") : null;
+      },
+      getSelectedText: selectedText,
+      getPageText: () => pageTextRef.current,
+      getText: () => selectedText() ?? pageTextRef.current,
+      hasSelection: () => selectionInCanvas() !== null,
+      clearSelection: () => {
+        setSelection(null);
+        onSelectionChange?.(false);
+      },
+    };
+  });
 
   /* ============ 렌더 ============ */
   useEffect(() => {
@@ -115,16 +195,35 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(function PdfViewer
         const pdfPage = await pdf.getPage(pageNum);
         if (cancelled) return;
 
-        // 텍스트 추출(요청 시)
-        if (onText) {
-          const textContent = await pdfPage.getTextContent();
-          const text = textContent.items
-            .map((item) => ("str" in item ? item.str : ""))
-            .join(" ");
-          if (!cancelled) onText(text);
-        }
-
         const viewport = pdfPage.getViewport({ scale });
+
+        // 텍스트 추출 + 아이템별 위치 계산(영역 텍스트 분석용).
+        const textContent = await pdfPage.getTextContent();
+        if (cancelled) return;
+        const boxes: TextItemBox[] = [];
+        const parts: string[] = [];
+        for (const item of textContent.items) {
+          if (!("str" in item)) continue;
+          parts.push(item.str);
+          if (!item.str) continue;
+          // item.transform: 텍스트공간→PDF사용자공간. viewport.transform과 합성하면
+          // 원점(m[4], m[5])이 글리프의 기준선 왼쪽 끝(캔버스 px)이 된다.
+          const m = pdfjsLib.Util.transform(viewport.transform, item.transform);
+          const w = item.width * viewport.scale;
+          const h = item.height * viewport.scale;
+          const x = m[4];
+          const baseline = m[5];
+          boxes.push({
+            str: item.str,
+            left: x,
+            top: baseline - h,
+            right: x + w,
+            bottom: baseline,
+          });
+        }
+        textItemsRef.current = boxes;
+        pageTextRef.current = parts.join(" ");
+
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d")!;
@@ -200,7 +299,7 @@ const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(function PdfViewer
     };
   }, []);
 
-  /* ============ 드래그 선택(수학) ============ */
+  /* ============ 드래그 선택 ============ */
   const coordsInWrapper = (e: React.MouseEvent) => {
     const rect = wrapperRef.current!.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };

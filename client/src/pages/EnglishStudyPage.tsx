@@ -6,7 +6,7 @@ import { Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useRef } from "react";
 import StudyShell from "@/components/study/StudyShell";
-import PdfViewer from "@/components/study/PdfViewer";
+import PdfViewer, { type PdfViewerHandle } from "@/components/study/PdfViewer";
 import SharedStudyTools from "@/components/study/SharedStudyTools";
 import { useAnswerSheet } from "@/hooks/useAnswerSheet";
 
@@ -31,7 +31,8 @@ export default function EnglishStudyPage() {
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterial | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const pdfTextRef = useRef("");
+  const [hasSelection, setHasSelection] = useState(false);
+  const viewerRef = useRef<PdfViewerHandle>(null);
 
   const [highlightedWords, setHighlightedWords] = useState<WordData[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -48,7 +49,7 @@ export default function EnglishStudyPage() {
     });
 
   const handleAnalyzeEnglish = async () => {
-    const text = pdfTextRef.current;
+    const text = viewerRef.current?.getText() ?? "";
     if (!text.trim()) {
       toast.info("이 페이지에서 분석할 텍스트를 찾지 못했습니다.");
       return;
@@ -83,8 +84,13 @@ export default function EnglishStudyPage() {
         className="w-full justify-start gap-2 bg-sky-600 hover:bg-sky-700"
       >
         {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-        어려운 단어 분석
+        {hasSelection ? "드래그 영역 단어 분석" : "어려운 단어 분석"}
       </Button>
+      {selectedMaterial && (
+        <p className="text-xs text-muted-foreground">
+          PDF에서 원하는 부분을 드래그하면 그 영역만, 드래그하지 않으면 페이지 전체를 분석합니다.
+        </p>
+      )}
 
       {highlightedWords.length > 0 && (
         <div className="space-y-2">
@@ -100,7 +106,7 @@ export default function EnglishStudyPage() {
       <div className="border-t pt-3">
         <SharedStudyTools
           subject="english"
-          getText={() => pdfTextRef.current}
+          getText={() => viewerRef.current?.getText() ?? ""}
           hasMaterial={!!selectedMaterial}
         />
       </div>
@@ -126,10 +132,12 @@ export default function EnglishStudyPage() {
     >
       {selectedMaterial ? (
         <PdfViewer
+          ref={viewerRef}
           fileUrl={selectedMaterial.fileUrl}
           page={currentPage}
           onTotalPages={setTotalPages}
-          onText={(t) => (pdfTextRef.current = t)}
+          enableSelection
+          onSelectionChange={setHasSelection}
         />
       ) : (
         <div className="flex h-full items-center justify-center text-muted-foreground">
