@@ -70,14 +70,18 @@ School_Learning/
 │       │   └── NotFound.tsx
 │       ├── components/
 │       │   ├── MaterialUploadButton.tsx # ★ 공용 PDF 업로드 버튼 (네 과목 공통)
-│       │   ├── study/SharedStudyTools.tsx # ★ 공통 AI 학습 도구 (요약/카드/용어/개념/퀴즈)
+│       │   ├── study/
+│       │   │   ├── StudyShell.tsx        # ★ 학습 페이지 공통 셸 (3분할 레이아웃·상단바)
+│       │   │   ├── PdfViewer.tsx         # ★ PDF 렌더 + 드래그 영역 선택·영역 텍스트 추출
+│       │   │   ├── MaterialsPanel.tsx    # 좌측 파일 목록 (이름변경/삭제/역할지정)
+│       │   │   └── SharedStudyTools.tsx  # ★ 공통 AI 학습 도구 (요약/카드/용어/개념/퀴즈)
 │       │   ├── SubjectGrid.tsx          # ★ 공용 과목 선택 카드 (홈/대시보드/선택 페이지)
 │       │   ├── EnglishHighlighter.tsx  # 단어 하이라이트 + 정의 조회
 │       │   ├── BlankQuiz.tsx
 │       │   ├── MathVisualizer.tsx
 │       │   ├── ErrorBoundary.tsx
 │       │   └── ui/             # shadcn 컴포넌트 53개
-│       ├── lib/subjects.ts             # ★ 세 과목 공통 메타데이터
+│       ├── lib/subjects.ts             # ★ 네 과목 공통 메타데이터
 │       ├── contexts/ThemeContext.tsx
 │       └── _core/hooks/useAuth.ts       # me + logout (로그인/가입은 각 페이지에서 tRPC 직접 호출)
 │
@@ -382,6 +386,52 @@ pnpm build     # 클라이언트 + 서버 번들
 
 ---
 
+## 9-d. UI 통일 + 드래그 영역 분석 전 과목 확대 (2026-07-15)
+
+### 9-d.1 대시보드·기록 페이지를 학습 페이지 디자인 언어로 통일
+
+`DashboardPage`와 `StudyRecordsPage`가 하드코딩 회색(`bg-gray-50` / `bg-white shadow-sm` /
+`border-0 shadow-md` / `text-gray-*`)을 쓰고 있어, 학습 페이지(`StudyShell` 등)의 테마 토큰 기반
+디자인과 이질적이었다. 세 갈래 화면(대시보드 → 기록 → 학습)이 자연스럽게 이어지도록 통일했다.
+
+- **헤더**: 학습 셸과 동일한 `h-14 border-b bg-card` 플랫 헤더. 계정 아이콘도 `CircleUser`로 통일.
+- **색상**: `bg-background` / `text-foreground` / `text-muted-foreground` / `border` 등 테마 토큰으로 교체.
+  다크 테마에서도 깨지지 않는다(현재 앱 기본 테마는 light, `switchable=false`).
+- **카드**: `border-0 shadow-md`(무거운 그림자) → 기본 `Card`(border + shadow-sm) 플랫 카드.
+  통계 아이콘 타일은 `bg-indigo-500/10 text-indigo-600`로 테마 대응. 과목별 카드에 과목 이모지 추가.
+- 기록 페이지의 난이도 배지·추천 카드에 다크 대응 variant를 붙이고, 추천 카드 색을 브랜드 인디고로 맞춤.
+  삭제 아이콘 `text-red-500` → `text-destructive`.
+- 공용 `SubjectGrid`의 `text-gray-600` → `text-muted-foreground`(홈·대시보드가 함께 개선됨).
+
+### 9-d.2 드래그 영역 분석을 전 과목으로 확대
+
+기존엔 수학만 드래그 영역을 **이미지로 크롭**해 분석했고(`cropSelection` + `/api/ocr` 등), 나머지 과목은
+**페이지 전체 텍스트**(pdfjs)만 썼다. 이제 **모든 과목**에서 "드래그한 영역이 있으면 그 부분만,
+없으면 페이지 전체"를 분석한다.
+
+- **핵심 설계**: 과목별 분석 입력이 텍스트냐 이미지냐로 갈린다.
+  - 국어·영어·탐구·공통 도구(`SharedStudyTools`)는 **텍스트** 분석 → 드래그 영역에 걸치는 pdfjs 텍스트
+    아이템만 골라 반환. **OCR 왕복 없이** PDF 텍스트 좌표로 계산한다.
+  - 수학은 **이미지** 분석 → 드래그 영역(없으면 페이지 전체)을 PNG로 크롭.
+- **`PdfViewer`가 "영역 인식" 뷰어로 확장됐다.** 렌더 시 텍스트 아이템의 캔버스 좌표 박스를 저장해두고
+  (`pdfjsLib.Util.transform(viewport.transform, item.transform)`로 환산, 선택 박스와 **중심점 교차**로 판정)
+  핸들 메서드를 노출한다:
+  - `getText()` = 선택 영역 텍스트 ?? 페이지 전체 텍스트 (텍스트 과목용)
+  - `cropSelectionOrFullPage()` = 선택 영역 크롭 ?? 페이지 전체 캔버스 (수학용)
+  - 그 밖에 `getSelectedText` / `getPageText` / `hasSelection` / 기존 `cropSelection` / `clearSelection`.
+- 각 학습 페이지는 `enableSelection` + `viewerRef.getText()`(또는 수학은 `cropSelectionOrFullPage()`)로 전환.
+  버튼 라벨이 선택 상태에 따라 "드래그 영역 …분석"으로 바뀌고, 안내 문구를 추가했다.
+- 더 이상 안 쓰는 `PdfViewer`의 `onText` prop과 각 페이지의 `pdfTextRef`를 제거했다.
+
+### 검증
+
+- `tsc --noEmit` 통과, `vite build` 성공.
+- **미검증**: 브라우저에서의 실제 드래그→영역 텍스트 추출 정확도(좌표 매핑)는 코드 검증까지만.
+  스캔 이미지 PDF는 pdfjs 텍스트가 없어 텍스트 과목의 영역 분석이 비지만, 이는 기존 페이지 전체 분석과
+  동일 전제다(그런 자료는 수학의 이미지 OCR 경로로 처리).
+
+---
+
 ## 10. 삽질 기록 (같은 실수 반복 방지)
 
 | 증상 | 진짜 원인 |
@@ -463,6 +513,10 @@ VPS를 쓴다면 **RAM 2GB 이상** 필요하다 (Vite 빌드 + MySQL 동시 실
   "답지 보기"가 동작한다 (`MathStudyPage.tsx`의 `ANSWER_FILE_PATTERN`). 예전 `dapzi.pdf` 하드코딩은 제거됨.
 - **모든 업로드는 `MaterialUploadButton`을 거친다.** 새 업로드 진입점을 만들 때 fetch를 직접 짜지 말고
   이 컴포넌트를 재사용할 것 (Cloudinary 업로드 + DB 저장 + 캐시 무효화가 한 곳에 있다).
+- **분석 텍스트/이미지는 `PdfViewer` 핸들로만 가져온다.** 페이지에서 별도 `pdfTextRef`를 만들지 말 것.
+  텍스트 과목은 `viewerRef.getText()`(드래그 영역 ?? 페이지 전체 텍스트), 수학은
+  `cropSelectionOrFullPage()`(드래그 영역 ?? 페이지 전체 이미지)를 쓴다 (§9-d.2). 드래그 영역 판정은
+  텍스트 아이템 **중심점**이 선택 박스 안에 드는지로 한다.
 - **미완성 과제: 이용약관·개인정보 처리방침 실제 문서.** 학생 대상 서비스라 필요하나 현재는 푸터에서
   "준비 중" 토스트로만 처리돼 있다.
 - **로그인 비밀번호는 평문이다(데모).** `users.password`에 해시 없이 저장·비교한다. 실서비스로 올리려면
