@@ -11,6 +11,7 @@ import {
   BookMarked,
   CircleUser,
   Clock,
+  GraduationCap,
   Target,
   TrendingUp,
 } from "lucide-react";
@@ -77,20 +78,28 @@ export default function DashboardPage() {
       </header>
 
       <div className="mx-auto w-full max-w-6xl flex-1 space-y-12 px-4 py-10">
-        {/* Hero / 학습 시작 */}
-        <section className="flex flex-col gap-6 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 p-8 text-white md:flex-row md:items-center md:justify-between md:p-12">
-          <div>
-            <h1 className="mb-2 text-3xl font-bold md:text-4xl">
-              다시 오신 걸 환영해요, {user?.name}님 👋
-            </h1>
-            <p className="text-indigo-100">
-              오늘도 학습을 이어가 볼까요? 과목을 골라 바로 시작하세요.
-            </p>
+        {/* Hero / 학습 시작 — 학습 페이지와 같은 플랫·테두리·인디고 톤 */}
+        <section className="flex flex-col gap-6 rounded-xl border bg-card p-6 md:flex-row md:items-center md:justify-between md:p-8">
+          <div className="flex items-start gap-4">
+            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 sm:flex">
+              <GraduationCap className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
+                오늘의 학습
+              </p>
+              <h1 className="mb-1 text-2xl font-bold text-foreground md:text-3xl">
+                다시 오신 걸 환영해요, {user?.name}님 👋
+              </h1>
+              <p className="text-muted-foreground">
+                과목을 골라 바로 시작하세요.
+              </p>
+            </div>
           </div>
           <Link href="/subjects">
             <Button
               size="lg"
-              className="bg-white px-8 text-lg text-indigo-700 hover:bg-indigo-50"
+              className="bg-indigo-600 px-8 text-lg text-white hover:bg-indigo-700"
             >
               학습 시작하기
               <ArrowRight className="ml-2 h-5 w-5" />
