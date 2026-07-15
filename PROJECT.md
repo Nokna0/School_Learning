@@ -16,6 +16,7 @@ PDF 학습 자료(수학·영어·화학)를 올리면 AI가 분석해 주는 �
 - **영어**: 지문 분석 → 단어 하이라이트 → 단어 정의 조회 → 빈칸 퀴즈
 - **화학**: 지문 기반 퀴즈 생성
 - 학습 기록·통계·추천, 수식/단어 저장
+- **계정(아이디/비밀번호/TOTP) 로그인** — 로그인 시 메인이 대시보드, 비로그인 시 홍보 페이지. 비로그인도 기능은 쓰되 학습 현황은 계정에 안 쌓임
 
 ---
 
@@ -53,7 +54,12 @@ School_Learning/
 │       │   ├── pdf.ts          # pdfjs 워커 설정
 │       │   └── utils.ts
 │       ├── pages/
-│       │   ├── Home.tsx
+│       │   ├── Home.tsx                 # 홍보 페이지 (비로그인 메인). "학습 시작하기" CTA
+│       │   ├── DashboardPage.tsx        # ★ 로그인 메인. 통계 + 과목 빠른 접근
+│       │   ├── LoginPage.tsx            # ★ 아이디/비밀번호/TOTP 로그인
+│       │   ├── SignupPage.tsx           # ★ 회원가입 (평문 저장 경고 배너)
+│       │   ├── AccountPage.tsx          # ★ 계정 설정 — TOTP 켜기/끄기
+│       │   ├── SubjectSelectPage.tsx    # ★ 과목 선택 (/subjects)
 │       │   ├── MathStudyPage.tsx       # PDF 렌더 → OCR → 수식 분석 + 답지 모드
 │       │   ├── EnglishStudyPage.tsx    # 지문 분석 → 단어 → 퀴즈
 │       │   ├── ChemistryStudyPage.tsx  # 퀴즈 생성
@@ -61,13 +67,15 @@ School_Learning/
 │       │   └── NotFound.tsx
 │       ├── components/
 │       │   ├── MaterialUploadButton.tsx # ★ 공용 PDF 업로드 버튼 (세 과목 공통)
+│       │   ├── SubjectGrid.tsx          # ★ 공용 과목 선택 카드 (홈/대시보드/선택 페이지)
 │       │   ├── EnglishHighlighter.tsx  # 단어 하이라이트 + 정의 조회
 │       │   ├── BlankQuiz.tsx
 │       │   ├── MathVisualizer.tsx
 │       │   ├── ErrorBoundary.tsx
 │       │   └── ui/             # shadcn 컴포넌트 53개
+│       ├── lib/subjects.ts             # ★ 세 과목 공통 메타데이터
 │       ├── contexts/ThemeContext.tsx
-│       └── _core/hooks/useAuth.ts
+│       └── _core/hooks/useAuth.ts       # me + logout (로그인/가입은 각 페이지에서 tRPC 직접 호출)
 │
 ├── server/                     # 백엔드 (Express + tRPC)
 │   ├── _core/
@@ -75,12 +83,13 @@ School_Learning/
 │   │   ├── env.ts              # dotenv (.env.local 우선, 그다음 .env)
 │   │   ├── db.ts               # ★ Drizzle + mysql2 풀 (DATABASE_SSL 지원)
 │   │   ├── trpc.ts             # initTRPC + superjson, public/protectedProcedure
-│   │   ├── context.ts          # 인증 컨텍스트 (userId)
+│   │   ├── context.ts          # ★ 인증 컨텍스트 (userId + isLoggedIn + res, 쿠키 세션)
+│   │   ├── totp.ts             # ★ RFC 6238 TOTP (node:crypto만, 외부 의존성 없음)
 │   │   ├── routes.ts           # REST 라우트 (업로드/AI)
 │   │   └── ai.ts               # AI 공급자 추상화
 │   ├── routers/                # tRPC 라우터
 │   │   ├── index.ts            # appRouter 조립
-│   │   ├── auth.ts             # me, logout
+│   │   ├── auth.ts             # ★ me, register, login, logout, TOTP setup/enable/disable
 │   │   ├── materials.ts        # list, upload
 │   │   ├── mathAssist.ts       # questionHelp
 │   │   └── studyRecords.ts     # 기록/통계/추천/수식/단어 (11개 프로시저)
@@ -113,7 +122,7 @@ School_Learning/
 
 | 테이블 | 용도 | 주의점 |
 |---|---|---|
-| `users` | 사용자 | |
+| `users` | 사용자 | 로그인용 컬럼 추가: `username`(UNIQUE, nullable), `password`(**평문 — 데모**), `totp_secret`, `totp_enabled`. 마이그레이션 `0001_open_domino.sql` |
 | `materials` | 업로드한 PDF 메타데이터 | **`file_key`에 UNIQUE 제약** ← 같은 키 재삽입 시 중복 에러 |
 | `study_records` | 학습 기록 | |
 | `quiz_sessions` / `quiz_answers` | 퀴즈 세션·답안 | |
@@ -145,7 +154,8 @@ PDF **원본은 DB에 없다.** Cloudinary에 있고 DB에는 `file_url` / `file
 
 ### tRPC (`/trpc` 와 `/api/trpc` 양쪽에 마운트)
 
-- `auth.me` (public) / `auth.logout` (protected)
+- `auth.me` (public — 비로그인/로컬폴백이면 `null` 반환) / `auth.register` (public) / `auth.login` (public) / `auth.logout` (protected)
+- `auth.setupTotp` / `auth.enableTotp` / `auth.disableTotp` (protected) — 2단계 인증 등록·해제
 - `materials.list` (public, `subject` 필수) / `materials.upload` (protected)
 - `mathAssist.questionHelp` (protected)
 - `studyRecords.*` — list, create, getStats, getRecommendations, getMathFormulas, saveMathFormula, deleteMathFormula, getEnglishWords, saveEnglishWord, deleteEnglishWord
@@ -321,6 +331,50 @@ pnpm build     # 클라이언트 + 서버 번들
 - 업로드 서버 체인은 §11에서 이미 실측 완료. 새 컴포넌트는 그 체인을 그대로 호출.
 - **미검증**: 브라우저에서의 실제 버튼 클릭·PDF 렌더링은 코드 검증(타입체크·훅 규칙·Provider 범위)까지만.
   배포 후 Chrome으로 육안 확인 권장.
+  → **후속(2026-07-15)**: 도커에서 실제 브라우저로 확인 중 PDF가 빈 화면("1 / 0")이던 문제를 잡았다.
+  원인은 nginx의 `.mjs` MIME(§10 표 참고). `nginx.conf` 수정으로 해결.
+
+---
+
+## 9-c. UI 개편 + 로그인 도입 (2026-07-15)
+
+난잡하던 진입 흐름을 정리하고 계정 기능을 붙였다.
+
+### 무엇이 바뀌었나
+
+- **메인 페이지가 로그인 상태로 갈린다.** `App.tsx`의 `HomeRoute`가 `useAuth().isAuthenticated`로
+  분기 → 비로그인은 홍보 페이지(`Home`), 로그인은 대시보드(`DashboardPage`).
+- **학습 시작 플로우.** 홍보 페이지 히어로 + 대시보드에 "학습 시작하기" → `/subjects`(과목 선택) → 과목 페이지.
+  과목 카드는 `components/SubjectGrid.tsx` + `lib/subjects.ts`로 공용화(홈·대시보드·선택 페이지가 공유).
+- **간단 로그인(데모).** 아이디/비밀번호/TOTP. 회원가입 페이지 포함.
+  - ⚠️ **비밀번호는 평문 저장·비교** — 데모 수준. `SignupPage`에 경고 배너로 명시.
+  - **TOTP는 실제 구현**(`server/_core/totp.ts`, RFC 6238, `node:crypto`만). Google Authenticator 등과 호환.
+    `AccountPage`에서 시크릿/otpauth URI로 등록 → 코드 확인 후 활성화.
+
+### 핵심 설계 포인트 (다시 안 헤매려고)
+
+- **세션은 기존 `edutech_uid` 쿠키를 그대로 재사용.** 로그인/가입 성공 시 tRPC 컨텍스트의 `res`로 쿠키를 굽는다.
+  그래서 `context.ts`에 `res`를 넘기도록 확장했다.
+- **`isLoggedIn` 플래그가 없으면 홍보/대시보드 구분이 안 된다.** `resolveUserId`가 항상 `LOCAL_USER_ID`로
+  폴백하므로 `auth.me`는 원래 **늘 사용자**를 반환했다 → 프론트가 항상 "로그인됨"으로 오인. 그래서
+  `resolveAuth()`가 `{userId, isLoggedIn}`을 함께 주고, **`auth.me`는 `isLoggedIn=false`면 `null`** 을 반환한다.
+  비로그인도 `userId`는 로컬 폴백이라 업로드·분석 기능은 그대로 쓰되, 대시보드/통계만 로그인 전용.
+- **크로스 도메인 쿠키.** 프론트/백엔드가 다른 도메인(Netlify→Render)이면 `SameSite=None; Secure`,
+  같은 오리진(로컬 도커 nginx 프록시)이면 `Lax`. 요청의 `Origin`≠`Host`로 판별(`auth.ts`의 `isCrossSite`).
+  → `NODE_ENV`로 판별하면 로컬 도커(http, NODE_ENV=production)에서 `Secure` 쿠키가 안 실린다. 그래서 오리진 비교로 함.
+
+### 검증 (로컬 도커 MySQL 실측)
+
+- `0001_open_domino.sql`을 로컬 도커 DB에 적용, tRPC 라우터를 실제 DB에 직접 구동한 통합 테스트 **19/19 통과**:
+  익명 me=null, 가입/쿠키, 로그인 성공·실패, 중복 CONFLICT, **TOTP setup→enable→코드 로그인→disable**, logout 쿠키 제거.
+  (표준 TOTP 생성기로 교차검증 — 서버 `verifyTotp`가 일반 인증 앱과 호환됨을 확인)
+- `tsc --noEmit` 통과, `vite build` 성공, `vitest` 11/11.
+- **미검증**: 브라우저에서의 실제 화면 조작은 코드/통합 검증까지만. 배포 후 육안 확인 권장.
+
+### 배포할 때 할 일
+
+1. **운영 TiDB에 마이그레이션 적용** — §8 절차대로 로컬에서 `DATABASE_URL`(TiDB) + `DATABASE_SSL=true` 주고 `pnpm db:push`.
+2. **`REQUIRE_AUTH`는 미설정 유지** — 그래야 비로그인 사용(로컬 폴백)이 된다.
 
 ---
 
@@ -336,6 +390,8 @@ pnpm build     # 클라이언트 + 서버 번들
 | Render `/api/trpc`가 404, AI가 mock 응답 | **엉뚱한 서비스를 테스트하고 있었다.** 워크스페이스에 서비스가 여러 개 있었고(`-0jah`, `-sh3f`), 실제 배포본은 `-sh3f` |
 | `materials.upload`가 500 (간헐적) | **앱 버그 아님.** `file_key`가 UNIQUE인데 테스트에서 같은 키를 반복 삽입 (§4). 실제 업로드는 `${Date.now()}-${파일명}`이라 충돌 안 함 |
 | PowerShell에서 curl JSON이 깨짐 | PS 5.1이 따옴표를 망가뜨림 → 페이로드를 파일로 넘겨야 함 (`-d "@file.json"`) |
+| 도커에서 PDF 업로드 500 (`Upload error`) | **`.env` 파일이 없어서** 컨테이너의 `CLOUDINARY_*`가 빈 값. `docker compose`는 `.env`를 읽는데(`.env.local`은 `pnpm dev`만 읽음) 그게 없었음 → `cp .env.example .env` 후 Cloudinary 키 채우고 서버 컨테이너 재기동 |
+| 도커에서 PDF가 "1 / 0"으로 빈 화면 (URL·업로드는 정상) | **nginx가 `.mjs`(pdfjs 워커)를 `application/octet-stream`으로 서빙** → 브라우저가 잘못된 MIME의 **모듈 워커 로딩을 거부** → `getDocument` 미완료. `nginx.conf`에 `.mjs`→`application/javascript` location 추가로 해결. **Netlify는 기본이 JS라 운영엔 영향 없음.** 수정 후엔 워커가 `immutable` 캐시라 **하드 리프레시(Ctrl+Shift+R)** 필요 |
 
 ---
 
@@ -405,3 +461,9 @@ VPS를 쓴다면 **RAM 2GB 이상** 필요하다 (Vite 빌드 + MySQL 동시 실
   이 컴포넌트를 재사용할 것 (Cloudinary 업로드 + DB 저장 + 캐시 무효화가 한 곳에 있다).
 - **미완성 과제: 이용약관·개인정보 처리방침 실제 문서.** 학생 대상 서비스라 필요하나 현재는 푸터에서
   "준비 중" 토스트로만 처리돼 있다.
+- **로그인 비밀번호는 평문이다(데모).** `users.password`에 해시 없이 저장·비교한다. 실서비스로 올리려면
+  bcrypt 등 해시가 필수. 회원가입 페이지에 경고 배너로 이 사실을 표시해 두었다.
+- **users 스키마가 바뀌었다 → TiDB에도 마이그레이션 적용 필요.** `0001_open_domino.sql`(username/password/
+  totp 컬럼)을 운영 DB에 안 밀면 로그인 관련 쿼리가 깨진다. §8 절차로 로컬에서 `pnpm db:push`.
+- **`auth.me`는 비로그인이면 `null`을 반환한다.** 프론트는 이 값으로 홍보/대시보드를 가른다. 로컬 폴백
+  사용자(`local-user`)는 로그인으로 치지 않는다(`isLoggedIn=false`).

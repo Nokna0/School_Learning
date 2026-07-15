@@ -1,0 +1,37 @@
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ArrowRight } from "lucide-react";
+import { Link } from "wouter";
+import { SUBJECTS } from "@/lib/subjects";
+
+/** 세 과목 선택 카드 그리드. 과목 선택 페이지·대시보드·홍보 페이지가 공유한다. */
+export default function SubjectGrid() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {SUBJECTS.map((s) => (
+        <Link key={s.key} href={s.href}>
+          <Card className="cursor-pointer border-2 border-transparent hover:border-indigo-400 hover:shadow-lg transition-all h-full">
+            <CardHeader>
+              <div className="text-5xl mb-4">{s.emoji}</div>
+              <CardTitle className="text-2xl">{s.label}</CardTitle>
+              <CardDescription>{s.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 mb-4">{s.detail}</p>
+              <Button className="w-full bg-indigo-600 hover:bg-indigo-700">
+                시작하기
+                <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
+            </CardContent>
+          </Card>
+        </Link>
+      ))}
+    </div>
+  );
+}

@@ -14,10 +14,15 @@ export default function Home() {
       <nav className="bg-white shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="text-2xl font-bold text-indigo-600">🎓 EduTech</div>
-          <div>
-            <Link href="/records">
-              <Button variant="outline" size="sm">
-                학습 기록
+          <div className="flex items-center gap-2">
+            <Link href="/login">
+              <Button variant="ghost" size="sm">
+                로그인
+              </Button>
+            </Link>
+            <Link href="/signup">
+              <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+                회원가입
               </Button>
             </Link>
           </div>
@@ -35,6 +40,25 @@ export default function Home() {
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             교육 격차를 해소하고 모든 학생이 동등한 학습 기회를 가질 수 있도록 돕습니다.
             AI 기반 개인 맞춤형 학습으로 더 효과적인 공부를 시작하세요.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <Link href="/subjects">
+              <Button
+                size="lg"
+                className="bg-indigo-600 hover:bg-indigo-700 text-lg px-10 py-6"
+              >
+                학습 시작하기
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+            </Link>
+            <Link href="/signup">
+              <Button size="lg" variant="outline" className="text-lg px-10 py-6">
+                회원가입하고 기록 남기기
+              </Button>
+            </Link>
+          </div>
+          <p className="text-sm text-gray-500">
+            로그인 없이도 이용할 수 있어요. 단, 학습 현황은 저장되지 않습니다.
           </p>
         </div>
       </section>

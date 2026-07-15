@@ -40,6 +40,7 @@ interface BlankQuizProps {
   description: string;
   estimatedTime: number;
   onComplete?: (results: QuizResultSummary) => void;
+  onContinue?: () => void;
 }
 
 export default function BlankQuiz({
@@ -48,6 +49,7 @@ export default function BlankQuiz({
   description,
   estimatedTime,
   onComplete,
+  onContinue,
 }: BlankQuizProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
@@ -286,7 +288,10 @@ export default function BlankQuiz({
             >
               다시 풀기
             </Button>
-            <Button className="flex-1 bg-indigo-600 hover:bg-indigo-700">
+            <Button
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+              onClick={onContinue}
+            >
               학습 계속하기
             </Button>
           </div>

@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { v2 as cloudinary } from "cloudinary";
 import { Readable } from "stream";
+import { cloudinary } from "./cloudinary.js";
 import {
   chatJSON,
   generateText,
@@ -13,13 +13,6 @@ import {
   getProvider,
   getModel,
 } from "./ai.js";
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 const router = Router();
 
@@ -105,8 +98,10 @@ router.post(
         size: file.size,
       });
     } catch (error) {
+      // 실제 원인을 클라이언트에도 돌려준다(수학 2차 업로드 500 진단용).
+      const message = error instanceof Error ? error.message : String(error);
       console.error("Upload error:", error);
-      return res.status(500).json({ error: "Upload failed" });
+      return res.status(500).json({ error: `Upload failed: ${message}` });
     }
   },
 );

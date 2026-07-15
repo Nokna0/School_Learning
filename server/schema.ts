@@ -20,6 +20,14 @@ export const users = mysqlTable(
     email: varchar("email", { length: 255 }).notNull().unique(),
     name: varchar("name", { length: 255 }).notNull(),
     profileImage: varchar("profile_image", { length: 500 }),
+    // ---- 간단 로그인 (데모용) ----
+    // username: 로그인 아이디. OAuth/로컬 폴백 사용자는 값이 없으므로 nullable.
+    username: varchar("username", { length: 50 }).unique(),
+    // ⚠️ 데모 수준: 비밀번호를 평문으로 저장/비교한다. 실제 서비스에서는 해시 필수.
+    password: varchar("password", { length: 255 }),
+    // TOTP(2단계 인증) — base32 시크릿. 활성화 전에도 setup 단계에서 저장된다.
+    totpSecret: varchar("totp_secret", { length: 64 }),
+    totpEnabled: boolean("totp_enabled").default(false).notNull(),
     createdAt: datetime("created_at")
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),

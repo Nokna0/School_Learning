@@ -1,23 +1,19 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
-import { Loader2, ArrowLeft, Zap } from "lucide-react";
-import { Link } from "wouter";
-import * as pdfjsLib from "pdfjs-dist";
-import "@/lib/pdf";
-import EnglishHighlighter from "@/components/EnglishHighlighter";
+import { Loader2, Zap, X } from "lucide-react";
+import { toast } from "sonner";
+import { useState, useRef } from "react";
 import BlankQuiz from "@/components/BlankQuiz";
-import MaterialUploadButton from "@/components/MaterialUploadButton";
-import { useState, useEffect, useRef } from "react";
-
+import StudyShell from "@/components/study/StudyShell";
+import PdfViewer from "@/components/study/PdfViewer";
 
 interface StudyMaterial {
   id: string;
   fileName: string;
   fileUrl: string;
   subject: string;
-  createdAt: Date;
 }
 
 interface WordData {
@@ -40,335 +36,162 @@ interface QuizQuestion {
   explanation?: string;
 }
 
-interface QuizData {
-  questions: QuizQuestion[];
-}
-
-interface RenderTask {
-  cancel: () => void;
-  promise: Promise<void>;
-}
-
 export default function EnglishStudyPage() {
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterial | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [pdfText, setPdfText] = useState("");
+  const pdfTextRef = useRef("");
+
   const [highlightedWords, setHighlightedWords] = useState<WordData[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [quizData, setQuizData] = useState<QuizData | null>(null);
+  const [quizData, setQuizData] = useState<QuizQuestion[] | null>(null);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
-  const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const renderTaskRef = useRef<RenderTask | null>(null);
 
-  // Fetch materials
-  const { data: materialsData, isLoading } = trpc.materials.list.useQuery(
-    { subject: "english" }
-  );
-
-  // 퀴즈 완료 시 학습 기록 저장
+  const { data: materialsData } = trpc.materials.list.useQuery({ subject: "english" });
+  const materials: StudyMaterial[] = Array.isArray(materialsData) ? materialsData : [];
   const createRecordMutation = trpc.studyRecords.create.useMutation();
 
-  useEffect(() => {
-    if (materialsData) {
-      setMaterials(materialsData as StudyMaterial[]);
-    }
-  }, [materialsData]);
-
-  const extractTextFromPDF = async (url: string) => {
-    try {
-      // Previous render task cancel
-      if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
-      }
-
-      const pdf = await pdfjsLib.getDocument(url).promise;
-      pdfDocRef.current = pdf;
-      setTotalPages(pdf.numPages);
-
-      const page = await pdf.getPage(currentPage);
-      const textContent = await page.getTextContent();
-      const text = textContent.items.map((item: any) => item.str).join(" ");
-      setPdfText(text);
-
-      // Render PDF page
-      if (canvasRef.current) {
-        const scale = 1.5;
-        const viewport = page.getViewport({ scale });
-        const context = canvasRef.current.getContext("2d");
-        if (context) {
-          canvasRef.current.width = viewport.width;
-          canvasRef.current.height = viewport.height;
-          context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-          try {
-            renderTaskRef.current = page.render({ canvasContext: context, viewport, canvas: canvasRef.current });
-            await renderTaskRef.current.promise;
-          } catch (renderError: any) {
-            if (renderError.name !== 'RenderingCancelledException') {
-              console.error("PDF render error:", renderError);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("PDF load error:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedMaterial) {
-      let isMounted = true;
-
-      const loadPDF = async () => {
-        if (isMounted) {
-          await extractTextFromPDF(selectedMaterial.fileUrl);
-        }
-      };
-
-      loadPDF();
-
-      return () => {
-        isMounted = false;
-        if (renderTaskRef.current) {
-          renderTaskRef.current.cancel();
-        }
-      };
-    }
-  }, [selectedMaterial, currentPage]);
-
   const handleAnalyzeEnglish = async () => {
-    if (!pdfText) return;
+    const text = pdfTextRef.current;
+    if (!text.trim()) {
+      toast.info("이 페이지에서 분석할 텍스트를 찾지 못했습니다.");
+      return;
+    }
     setAnalyzing(true);
     try {
-      const response = await fetch(apiUrl("/api/english-analyze"), {
+      const res = await fetch(apiUrl("/api/english-analyze"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: pdfText }),
+        body: JSON.stringify({ text }),
       });
-
-      const data = await response.json();
-      setHighlightedWords(data.words || []);
-    } catch (error) {
-      console.error("English analysis error:", error);
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      const data = await res.json();
+      const words: WordData[] = data.words || [];
+      setHighlightedWords(words);
+      if (words.length === 0) toast.info("이 페이지에서 강조할 단어를 찾지 못했습니다.");
+    } catch (e) {
+      console.error("English analysis error:", e);
+      toast.error("단어 분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setAnalyzing(false);
     }
   };
 
   const handleGenerateQuiz = async () => {
-    if (!pdfText) return;
+    const text = pdfTextRef.current;
+    if (!text.trim()) {
+      toast.info("이 페이지에서 퀴즈로 만들 텍스트를 찾지 못했습니다.");
+      return;
+    }
     setGeneratingQuiz(true);
     try {
-      const response = await fetch(apiUrl("/api/quiz-generate"), {
+      const res = await fetch(apiUrl("/api/quiz-generate"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pdfText, subject: "english" }),
+        body: JSON.stringify({ pdfText: text, subject: "english" }),
       });
-
-      const data = await response.json();
-      // API 응답 형식에 맞게 처리
-      const quizQuestions = Array.isArray(data) ? data : data.questions || [];
-      setQuizData({ questions: quizQuestions });
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      const data = await res.json();
+      const questions: QuizQuestion[] = Array.isArray(data) ? data : data.questions || [];
+      if (questions.length === 0) {
+        toast.info("퀴즈를 생성하지 못했습니다. 다시 시도해 주세요.");
+        return;
+      }
+      setQuizData(questions);
       setShowQuiz(true);
-    } catch (error) {
-      console.error("Quiz generation error:", error);
+    } catch (e) {
+      console.error("Quiz generation error:", e);
+      toast.error("퀴즈 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setGeneratingQuiz(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card p-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                돌아가기
-              </Button>
-            </Link>
-            <h1 className="text-2xl font-bold">영어 학습</h1>
-          </div>
-          {!selectedMaterial && <MaterialUploadButton subject="english" />}
+  const tools = (
+    <div className="space-y-3">
+      <Button onClick={handleAnalyzeEnglish} disabled={analyzing || !selectedMaterial} className="w-full gap-2">
+        {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+        현재 페이지 분석
+      </Button>
+
+      {highlightedWords.length > 0 && (
+        <div className="space-y-2">
+          {highlightedWords.map((word) => (
+            <Card key={word.word} className="p-3">
+              <p className="text-sm font-semibold">{word.word}</p>
+              <p className="text-xs text-muted-foreground">{word.koreanMeaning}</p>
+            </Card>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4">
-        {!selectedMaterial ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isLoading ? (
-              <div className="col-span-full text-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-              </div>
-            ) : materials.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center gap-4 py-12 text-muted-foreground">
-                <p>업로드된 파일이 없습니다. PDF를 업로드하여 학습을 시작하세요.</p>
-                <MaterialUploadButton subject="english" />
-              </div>
-            ) : (
-              materials.map((material) => (
-                <Card
-                  key={material.id}
-                  className="cursor-pointer hover:shadow-lg transition-shadow"
-                  onClick={() => setSelectedMaterial(material)}
-                >
-                  <CardHeader>
-                    <CardTitle className="text-lg truncate">{material.fileName}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(material.createdAt).toLocaleDateString("ko-KR")}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+      <Button onClick={handleGenerateQuiz} disabled={generatingQuiz || !selectedMaterial} className="w-full gap-2">
+        {generatingQuiz ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+        백지 퀴즈 생성
+      </Button>
+    </div>
+  );
+
+  return (
+    <>
+      <StudyShell
+        subject="english"
+        materials={materials}
+        selectedMaterial={selectedMaterial}
+        onSelect={(m) => {
+          setSelectedMaterial(m as StudyMaterial);
+          setCurrentPage(1);
+          setHighlightedWords([]);
+        }}
+        page={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        tools={tools}
+      >
+        {selectedMaterial ? (
+          <PdfViewer
+            fileUrl={selectedMaterial.fileUrl}
+            page={currentPage}
+            onTotalPages={setTotalPages}
+            onText={(t) => (pdfTextRef.current = t)}
+          />
         ) : (
-          <div className="flex gap-4 h-[calc(100vh-150px)]">
-            {/* PDF Viewer - Center */}
-            <div className="flex-1 flex flex-col bg-card rounded-lg border overflow-hidden">
-              <div className="flex-1 overflow-auto bg-muted p-4">
-                <canvas
-                  ref={canvasRef}
-                  className="mx-auto shadow-lg"
-                  style={{ maxWidth: "100%", height: "auto" }}
-                />
-              </div>
-
-              {/* PDF Navigation */}
-              <div className="border-t p-4 flex items-center justify-between">
-                <Button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  variant="outline"
-                  size="sm"
-                >
-                  이전
-                </Button>
-                <span className="text-sm font-medium">
-                  {currentPage} / {totalPages}
-                </span>
-                <Button
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  variant="outline"
-                  size="sm"
-                >
-                  다음
-                </Button>
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="w-80 flex flex-col gap-4 overflow-y-auto">
-              {/* Material Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">{selectedMaterial.fileName}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    onClick={() => setSelectedMaterial(null)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    다른 파일 선택
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* English Analysis */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">단어 분석</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button
-                    onClick={handleAnalyzeEnglish}
-                    disabled={analyzing || !pdfText}
-                    className="w-full gap-2"
-                  >
-                    {analyzing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Zap className="w-4 h-4" />
-                    )}
-                    현재 페이지 분석
-                  </Button>
-
-                  {highlightedWords.length > 0 && (
-                    <div className="space-y-2">
-                      {highlightedWords.map((word) => (
-                        <Card key={word.word} className="p-3">
-                          <p className="font-semibold text-sm">{word.word}</p>
-                          <p className="text-xs text-muted-foreground">{word.koreanMeaning}</p>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Quiz Generation */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">백지 퀴즈</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    onClick={handleGenerateQuiz}
-                    disabled={generatingQuiz || !pdfText}
-                    className="w-full gap-2"
-                  >
-                    {generatingQuiz ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Zap className="w-4 h-4" />
-                    )}
-                    퀴즈 생성
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Quiz Display */}
-              {showQuiz && quizData && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">퀴즈 풀기</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <BlankQuiz
-                      questions={quizData.questions}
-                      title="영어 퀴즈"
-                      description="현재 페이지의 내용을 바탕으로 한 퀴즈입니다."
-                      estimatedTime={10}
-                      onComplete={(results) =>
-                        createRecordMutation.mutate({
-                          subject: "english",
-                          duration: 10,
-                          score: results.score,
-                          notes: `퀴즈 ${results.totalQuestions}문항 중 ${results.correctAnswers}개 정답`,
-                        })
-                      }
-                    />
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            왼쪽에서 파일을 선택하거나 업로드하세요.
           </div>
         )}
-      </div>
-    </div>
+      </StudyShell>
+
+      {showQuiz && quizData && (
+        <div className="fixed inset-0 z-[999] flex items-start justify-center overflow-y-auto bg-black/20 px-4 py-8 backdrop-blur-sm">
+          <div className="relative w-full max-w-2xl">
+            <button
+              className="absolute -top-6 right-0 text-white"
+              onClick={() => setShowQuiz(false)}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <BlankQuiz
+              questions={quizData}
+              title="영어 퀴즈"
+              description="현재 페이지의 내용을 바탕으로 한 퀴즈입니다."
+              estimatedTime={10}
+              onContinue={() => setShowQuiz(false)}
+              onComplete={(results) =>
+                createRecordMutation.mutate({
+                  subject: "english",
+                  duration: 10,
+                  score: results.score,
+                  notes: `퀴즈 ${results.totalQuestions}문항 중 ${results.correctAnswers}개 정답`,
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -1,20 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ArrowLeft, Zap, BookOpen, X, BookmarkPlus, Check } from "lucide-react";
-import { Link } from "wouter";
+import { Loader2, Zap, BookOpen, X, BookmarkPlus, Check } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { trpc } from "@/lib/trpc";
-import MathVisualizer from "@/components/MathVisualizer";
-import MaterialUploadButton from "@/components/MaterialUploadButton";
 import { toast } from "sonner";
+import MathVisualizer from "@/components/MathVisualizer";
+import StudyShell from "@/components/study/StudyShell";
+import PdfViewer, { type PdfViewerHandle } from "@/components/study/PdfViewer";
 
 // 답지로 인식할 파일명 규칙. 파일명에 아래 단어가 포함되면 답지로 취급한다.
 const ANSWER_FILE_PATTERN = /답지|정답|해설|풀이|dapzi|answer|solution/i;
 
-import * as pdfjsLib from "pdfjs-dist";
-import "@/lib/pdf";
-
+// data URL 접두사를 떼고 순수 base64만 남긴다(서버가 접두사를 다시 붙인다).
+const rawBase64 = (dataUrl: string) => dataUrl.replace(/^data:image\/\w+;base64,/, "");
 
 interface StudyMaterial {
   id: string;
@@ -35,214 +34,108 @@ interface MathExpression {
   description?: string;
 }
 
-interface SelectionBox {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  containerRect: DOMRect;
-}
-
-interface DragStartCoord {
-  x: number;
-  y: number;
-}
-
 export default function MathStudyPage() {
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterial | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
+  const [hasSelection, setHasSelection] = useState(false);
 
   const [mathExpressions, setMathExpressions] = useState<MathExpression[]>([]);
   const [graphDescriptions, setGraphDescriptions] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
 
-  // Answer sheet detailed explanation
-  const [answerExplanation, setAnswerExplanation] = useState<string>("");
+  const [answerExplanation, setAnswerExplanation] = useState("");
   const [answerAnalyzing, setAnswerAnalyzing] = useState(false);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
-
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<DragStartCoord | null>(null);
-  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
-
-  const { data: materialsData } = trpc.materials.list.useQuery({ subject: "math" });
-
-  // 답지 모드
   const [isAnswerMode, setIsAnswerMode] = useState(false);
   const [mainMaterial, setMainMaterial] = useState<StudyMaterial | null>(null);
 
-  // 문제 접근 가이드
   const [questionHelp, setQuestionHelp] = useState<QuestionHelpResult | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [guideExpanded, setGuideExpanded] = useState(false);
 
-  const questionHelpMutation = trpc.mathAssist.questionHelp.useMutation();
-
-  // 분석된 수식 저장
   const [savedFormulas, setSavedFormulas] = useState<Set<string>>(new Set());
+
+  const viewerRef = useRef<PdfViewerHandle>(null);
+
+  const { data: materialsData } = trpc.materials.list.useQuery({ subject: "math" });
+  const materials: StudyMaterial[] = Array.isArray(materialsData) ? materialsData : [];
+  // 답지는 메인 목록에서 숨긴다.
+  const listMaterials = materials.filter((m) => !ANSWER_FILE_PATTERN.test(m.fileName));
+
+  const questionHelpMutation = trpc.mathAssist.questionHelp.useMutation();
   const saveFormulaMutation = trpc.studyRecords.saveMathFormula.useMutation({
-    onSuccess: (_, variables) => {
-      setSavedFormulas((prev) => new Set(prev).add(variables.expression));
-    },
+    onSuccess: (_, variables) =>
+      setSavedFormulas((prev) => new Set(prev).add(variables.expression)),
   });
 
-  /* ====================== 파일 목록 ======================= */
+  // 파일/페이지 바뀌면 분석 결과 초기화
   useEffect(() => {
-    if (Array.isArray(materialsData)) setMaterials(materialsData);
-  }, [materialsData]);
-
-  /* ====================== PDF 렌더 ======================= */
-  async function extractPage(url: string, pageNum: number) {
-    const task = pdfjsLib.getDocument({
-      url: apiUrl(`/api/pdf-proxy?u=${encodeURIComponent(url)}`),
-      withCredentials: true,
-    });
-
-    const pdf = await task.promise;
-    setTotalPages(pdf.numPages);
-
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.5 });
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d")!;
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
-  }
-
-  useEffect(() => {
-    if (!selectedMaterial) return;
-    extractPage(selectedMaterial.fileUrl, currentPage);
-
-    setSelectionBox(null);
     setMathExpressions([]);
     setGraphDescriptions([]);
     setQuestionHelp(null);
     setGuideExpanded(false);
     setAnswerExplanation("");
+    setHasSelection(false);
   }, [selectedMaterial, currentPage]);
 
-  /* ====================== Crop ======================= */
-  function cropCanvas(canvas: HTMLCanvasElement, box: any) {
-    const canvasRect = canvas.getBoundingClientRect();
-    const containerRect = box.containerRect;
-
-    const leftInCanvas = box.left - (canvasRect.left - containerRect.left);
-    const topInCanvas = box.top - (canvasRect.top - containerRect.top);
-
-    const scaleX = canvas.width / canvasRect.width;
-    const scaleY = canvas.height / canvasRect.height;
-
-    const sx = leftInCanvas * scaleX;
-    const sy = topInCanvas * scaleY;
-    const sw = box.width * scaleX;
-    const sh = box.height * scaleY;
-
-    const temp = document.createElement("canvas");
-    temp.width = sw;
-    temp.height = sh;
-    temp.getContext("2d")!.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-
-    return temp.toDataURL("image/png");
-  }
-
-  /* ====================== 드래그 ======================= */
-  const handleMouseDown = (e: any) => {
-    const rect = canvasContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+  const requireSelection = () => {
+    const cropped = viewerRef.current?.cropSelection();
+    if (!cropped) {
+      toast.info("분석할 영역을 먼저 드래그하세요.");
+      return null;
+    }
+    return cropped;
   };
 
-  const handleMouseMove = (e: any) => {
-    if (!isDragging || !dragStart) return;
-
-    const rect = canvasContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-
-    setSelectionBox({
-      left: Math.min(dragStart.x, cx),
-      top: Math.min(dragStart.y, cy),
-      width: Math.abs(cx - dragStart.x),
-      height: Math.abs(cy - dragStart.y),
-      containerRect: rect,
-    });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  /* ====================== Vision 분석 ======================= */
+  /* ===== 수식 분석 ===== */
   const analyzeSelection = async () => {
-    if (!selectionBox) return toast.info("분석할 영역을 먼저 드래그하세요.");
-
-    const base64 = cropCanvas(canvasRef.current!, selectionBox);
-
+    const cropped = requireSelection();
+    if (!cropped) return;
     setAnalyzing(true);
-
     try {
       const res = await fetch(apiUrl("/api/math-analyze"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: base64.replace(/^data:image\/png;base64,/, ""),
-        }),
+        body: JSON.stringify({ imageBase64: rawBase64(cropped) }),
       });
-
-      const raw = await res.text();
-      const data = JSON.parse(raw);
-
-      setMathExpressions(data.expressions || []);
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      const data = await res.json();
+      const expressions: MathExpression[] = data.expressions || [];
+      setMathExpressions(expressions);
       setGraphDescriptions(data.graphDescriptions || []);
+      if (expressions.length === 0 && (!data.graphDescriptions || data.graphDescriptions.length === 0)) {
+        toast.info("인식된 수식이 없습니다. 더 선명한 영역을 드래그해 보세요.");
+      }
     } catch (e) {
       console.error(e);
+      toast.error("수식 분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setAnalyzing(false);
     }
   };
 
-  /* ====================== 문제 접근 가이드 ======================= */
+  /* ===== 문제 접근 가이드 ===== */
   const analyzeQuestionGuide = async () => {
-    if (!selectionBox) return toast.info("문제 영역을 먼저 드래그하세요.");
-
-    const base64img = cropCanvas(canvasRef.current!, selectionBox);
-
+    const cropped = requireSelection();
+    if (!cropped) return;
     setGuideLoading(true);
-
     try {
       const ocrRes = await fetch(apiUrl("/api/ocr"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64img }),
+        body: JSON.stringify({ imageBase64: rawBase64(cropped) }),
       });
-
+      if (!ocrRes.ok) throw new Error(`서버 응답 ${ocrRes.status}`);
       const ocr = await ocrRes.json();
-      const text = ocr?.text || "";
-
-      if (!text.trim()) {
-        setGuideLoading(false);
-        return toast.error("문장을 인식하지 못했습니다. 더 선명한 영역을 드래그해 보세요.");
+      const text = (ocr?.text || "").trim();
+      if (!text) {
+        toast.error("문장을 인식하지 못했습니다. 더 선명한 영역을 드래그해 보세요.");
+        return;
       }
-
       const result = await questionHelpMutation.mutateAsync({ text });
-
       setQuestionHelp(result);
       setGuideExpanded(true);
     } catch (e) {
@@ -253,41 +146,25 @@ export default function MathStudyPage() {
     }
   };
 
-  /* ====================== 답지 상세 설명 ======================= */
+  /* ===== 답지 상세 설명 ===== */
   const analyzeAnswerDetail = async () => {
-    if (!isAnswerMode)
-      return toast.info("먼저 '답지 보기'를 누른 뒤 답지에서 영역을 드래그하세요.");
-
-    if (!selectionBox) return toast.info("답지에서 설명이 필요한 부분을 드래그하세요.");
-
-    const base64 = cropCanvas(canvasRef.current!, selectionBox).replace(
-      /^data:image\/png;base64,/,
-      ""
-    );
-
+    if (!isAnswerMode) {
+      toast.info("먼저 '답지 보기'를 누른 뒤 답지에서 영역을 드래그하세요.");
+      return;
+    }
+    const cropped = requireSelection();
+    if (!cropped) return;
     setAnswerAnalyzing(true);
-
     try {
       const res = await fetch(apiUrl("/api/answer-explain"), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64 }),
+        body: JSON.stringify({ imageBase64: rawBase64(cropped) }),
       });
-
-      const raw = await res.text();
-      let data: any;
-
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = { explanation: raw };
-      }
-
-      setAnswerExplanation(
-        data.explanation ||
-          "답지 해설 응답 형식이 예상과 다릅니다.\n\n" + raw
-      );
+      if (!res.ok) throw new Error(`서버 응답 ${res.status}`);
+      const data = await res.json();
+      setAnswerExplanation(data.explanation || "답지 해설 응답 형식이 예상과 다릅니다.");
     } catch (e) {
       console.error(e);
       toast.error("답지 상세 설명에 실패했습니다. 잠시 후 다시 시도해 주세요.");
@@ -296,14 +173,15 @@ export default function MathStudyPage() {
     }
   };
 
-  /* ====================== 답지 토글 ======================= */
+  /* ===== 답지 토글 ===== */
   const handleToggleAnswer = () => {
     const answer = materials.find((m) => ANSWER_FILE_PATTERN.test(m.fileName));
-    if (!answer)
-      return toast.error(
+    if (!answer) {
+      toast.error(
         "답지 파일이 없습니다. 파일명에 '답지' 또는 '해설'이 포함된 PDF를 업로드하세요.",
       );
-
+      return;
+    }
     if (!isAnswerMode) {
       if (selectedMaterial) setMainMaterial(selectedMaterial);
       setSelectedMaterial(answer);
@@ -312,388 +190,229 @@ export default function MathStudyPage() {
       if (mainMaterial) setSelectedMaterial(mainMaterial);
       setIsAnswerMode(false);
     }
-
     setCurrentPage(1);
     setAnswerExplanation("");
   };
 
-  /* ====================== 렌더링 ======================= */
-  return (
-    <div className="p-4 relative">
+  const handleSelect = (m: StudyMaterial) => {
+    setSelectedMaterial(m);
+    setMainMaterial(m);
+    setIsAnswerMode(false);
+    setCurrentPage(1);
+  };
 
-      {/* 뒤로가기 */}
-      <Link href="/">
-        <Button variant="outline" className="mb-4 text-lg">
-          <ArrowLeft className="w-6 h-6 mr-2" /> 돌아가기
+  /* ===== 우측 도구 패널 ===== */
+  const tools = (
+    <div className="space-y-3">
+      {selectedMaterial && (
+        <Button
+          onClick={handleToggleAnswer}
+          variant={isAnswerMode ? "default" : "outline"}
+          className="w-full"
+        >
+          {isAnswerMode ? "문제 보기" : "답지 보기"}
         </Button>
-      </Link>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Button
+        className="w-full bg-indigo-600 hover:bg-indigo-700"
+        onClick={analyzeSelection}
+        disabled={!selectedMaterial || analyzing}
+      >
+        {analyzing ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />분석 중...</>
+        ) : (
+          <><Zap className="mr-2 h-4 w-4" />드래그 영역 수식 분석</>
+        )}
+      </Button>
 
-        {/* ==================== PDF 영역 ==================== */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-3xl font-bold">수학 학습</CardTitle>
+      <Button
+        className="w-full bg-green-600 hover:bg-green-700"
+        onClick={analyzeQuestionGuide}
+        disabled={!selectedMaterial || guideLoading}
+      >
+        {guideLoading ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />분석 중...</>
+        ) : (
+          <><BookOpen className="mr-2 h-4 w-4" />문제 접근 가이드</>
+        )}
+      </Button>
+
+      <Button
+        className="w-full bg-amber-600 hover:bg-amber-700"
+        onClick={analyzeAnswerDetail}
+        disabled={!selectedMaterial || answerAnalyzing}
+      >
+        {answerAnalyzing ? (
+          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />설명 생성 중...</>
+        ) : (
+          <><Zap className="mr-2 h-4 w-4" />답지 상세 설명</>
+        )}
+      </Button>
+
+      {!hasSelection && selectedMaterial && (
+        <p className="text-xs text-muted-foreground">
+          PDF에서 분석할 영역을 드래그로 선택하세요. 빈 곳을 클릭하면 선택이 해제됩니다.
+        </p>
+      )}
+
+      {/* 답지 설명 결과 */}
+      {answerExplanation && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">답지 해설</CardTitle>
           </CardHeader>
-
-          <CardContent className="space-y-4 text-lg">
-
-            {!selectedMaterial && <p>오른쪽에서 파일을 선택하세요.</p>}
-
-            {selectedMaterial && (
-              <div className="flex gap-4">
-
-                {/* 답지 버튼 */}
-                <div className="w-36">
-                  <Button
-                    onClick={handleToggleAnswer}
-                    variant={isAnswerMode ? "default" : "outline"}
-                    className="w-full mb-3 text-lg py-4 font-bold"
-                  >
-                    {isAnswerMode ? "문제 보기" : "답지 보기"}
-                  </Button>
-                </div>
-
-                {/* PDF 캔버스 */}
-                <div className="flex-1">
-                  <div
-                    ref={canvasContainerRef}
-                    className="relative bg-gray-100 rounded-md overflow-auto flex justify-center items-start"
-                    style={{ height: "75vh" }}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                  >
-                    {/* 가로폭 줄임 max-w-[660px] */}
-                    <div className="max-w-[660px] mx-auto">
-                      <canvas ref={canvasRef} />
-                    </div>
-
-                    {selectionBox && (
-                      <div
-                        className="absolute bg-blue-300 opacity-30 border-2 border-blue-600"
-                        style={{
-                          left: selectionBox.left,
-                          top: selectionBox.top,
-                          width: selectionBox.width,
-                          height: selectionBox.height,
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  {/* 페이지 이동 */}
-                  <div className="flex justify-between mt-4 text-xl font-semibold">
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="text-lg px-6"
-                    >
-                      이전
-                    </Button>
-
-                    <span>
-                      {currentPage} / {totalPages}
-                    </span>
-
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="text-lg px-6"
-                    >
-                      다음
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
+          <CardContent className="max-h-60 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
+            {answerExplanation}
           </CardContent>
         </Card>
+      )}
 
-        {/* ==================== 사이드바 ==================== */}
-        <div className="space-y-4">
-
-          {/* 파일 목록 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl font-bold">저장된 파일</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-lg">
-              <MaterialUploadButton subject="math" className="w-full" />
-
-              {materials.filter((m) => !ANSWER_FILE_PATTERN.test(m.fileName)).length === 0 && (
-                <p className="text-sm text-muted-foreground pt-2">
-                  업로드된 교재가 없습니다.
-                </p>
-              )}
-
-              {materials
-                .filter((m) => !ANSWER_FILE_PATTERN.test(m.fileName))
-                .map((m) => (
-                  <button
-                    key={m.id}
-                    className="block w-full p-4 border rounded-lg hover:bg-gray-100 text-left text-lg"
-                    onClick={() => {
-                      setSelectedMaterial(m);
-                      setMainMaterial(m);
-                      setIsAnswerMode(false);
-                      setAnswerExplanation("");
-                    }}
-                  >
-                    {m.fileName}
-                  </button>
-                ))}
-            </CardContent>
-          </Card>
-
-          {/* 분석 버튼 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl font-bold">분석</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-lg">
-
-              {/* 수식 추출 */}
-              <Button
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-xl py-5"
-                onClick={analyzeSelection}
-                disabled={!selectedMaterial || analyzing}
-              >
-                {analyzing ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin mr-3" />
-                    분석 중...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-6 h-6 mr-3" />
-                    드래그 영역 수식 분석
-                  </>
-                )}
-              </Button>
-
-              {/* 문제 접근 가이드 */}
-              <Button
-                className="w-full bg-green-600 hover:bg-green-700 text-xl py-5"
-                onClick={analyzeQuestionGuide}
-                disabled={!selectedMaterial || guideLoading}
-              >
-                {guideLoading ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin mr-3" />
-                    분석 중...
-                  </>
-                ) : (
-                  <>
-                    <BookOpen className="w-6 h-6 mr-3" />
-                    문제 접근 가이드
-                  </>
-                )}
-              </Button>
-
-              {/* ⬇️ 새로 추가됨: 답지 상세 설명 */}
-              <Button
-                className="w-full bg-amber-600 hover:bg-amber-700 text-xl py-5"
-                onClick={analyzeAnswerDetail}
-                disabled={!selectedMaterial || answerAnalyzing}
-              >
-                {answerAnalyzing ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin mr-3" />
-                    설명 생성 중...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-6 h-6 mr-3" />
-                    답지 상세 설명
-                  </>
-                )}
-              </Button>
-
-              {/* 결과 출력 */}
-              <div className="border rounded-md p-3 h-48 bg-slate-50 overflow-y-auto whitespace-pre-wrap text-base leading-relaxed">
-                {answerExplanation || "답지에서 궁금한 부분을 드래그한 후 위 버튼을 눌러 분석하세요."}
-              </div>
-
-            </CardContent>
-          </Card>
-
-          {/* 추출된 수식 */}
-          {mathExpressions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl font-bold">추출된 수식</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {mathExpressions
-                  .filter((e) => e.latex)
-                  .map((e, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between gap-3 border rounded-md p-3"
-                    >
-                      <div className="min-w-0">
-                        <div className="font-mono text-lg truncate">{e.latex}</div>
-                        {e.description && (
-                          <div className="text-sm text-muted-foreground">{e.description}</div>
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          saveFormulaMutation.mutate({
-                            expression: e.latex!,
-                            description: e.description,
-                            type: "expression",
-                          })
-                        }
-                        disabled={
-                          saveFormulaMutation.isPending || savedFormulas.has(e.latex!)
-                        }
-                      >
-                        {savedFormulas.has(e.latex!) ? (
-                          <>
-                            <Check className="w-4 h-4 mr-1" />
-                            저장됨
-                          </>
-                        ) : (
-                          <>
-                            <BookmarkPlus className="w-4 h-4 mr-1" />
-                            저장
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 그래프 */}
-          {mathExpressions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl font-bold">그래프</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <MathVisualizer
-                  initialExpressions={mathExpressions
-                    .filter((e) => e.latex)
-                    .map((e) => ({
-                      expression: e.latex!,
-                      type: "expression",
-                      description: e.description,
-                    }))}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 그래프 설명 */}
-          {graphDescriptions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl font-bold">그래프 설명</CardTitle>
-              </CardHeader>
-              <CardContent className="text-lg">
-                {graphDescriptions.map((g, i) => (
-                  <div key={i} className="py-2 border-b">
-                    {g}
+      {/* 추출된 수식 */}
+      {mathExpressions.filter((e) => e.latex).length > 0 && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">추출된 수식</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {mathExpressions
+              .filter((e) => e.latex)
+              .map((e, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 rounded-md border p-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-sm">{e.latex}</div>
+                    {e.description && (
+                      <div className="text-xs text-muted-foreground">{e.description}</div>
+                    )}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 축소된 문제 접근 */}
-          {questionHelp && !guideExpanded && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl font-bold">문제 접근 가이드</CardTitle>
-              </CardHeader>
-              <CardContent className="text-lg space-y-3">
-                <div>
-                  <b className="text-xl">핵심 개념</b>
-                  <ul className="list-disc ml-6">
-                    {questionHelp.keyConcepts.map((k, i) => (
-                      <li key={i}>{k}</li>
-                    ))}
-                  </ul>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      saveFormulaMutation.mutate({
+                        expression: e.latex!,
+                        description: e.description,
+                        type: "expression",
+                      })
+                    }
+                    disabled={saveFormulaMutation.isPending || savedFormulas.has(e.latex!)}
+                  >
+                    {savedFormulas.has(e.latex!) ? (
+                      <><Check className="mr-1 h-3 w-3" />저장됨</>
+                    ) : (
+                      <><BookmarkPlus className="mr-1 h-3 w-3" />저장</>
+                    )}
+                  </Button>
                 </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
 
-                <Button className="w-full text-lg" onClick={() => setGuideExpanded(true)}>
-                  크게 보기
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+      {/* 그래프 */}
+      {mathExpressions.filter((e) => e.latex).length > 0 && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">그래프</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MathVisualizer
+              initialExpressions={mathExpressions
+                .filter((e) => e.latex)
+                .map((e) => ({
+                  expression: e.latex!,
+                  type: "expression",
+                  description: e.description,
+                }))}
+            />
+          </CardContent>
+        </Card>
+      )}
 
-        </div>
-      </div>
+      {/* 그래프 설명 */}
+      {graphDescriptions.length > 0 && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-base">그래프 설명</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {graphDescriptions.map((g, i) => (
+              <div key={i} className="border-b py-2 last:border-0">{g}</div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 
-      {/* ================= 팝업 ================= */}
+  return (
+    <>
+      <StudyShell
+        subject="math"
+        materials={listMaterials}
+        selectedMaterial={selectedMaterial}
+        onSelect={(m) => handleSelect(m as StudyMaterial)}
+        page={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        tools={tools}
+        emptyHint="업로드된 교재가 없습니다."
+      >
+        {selectedMaterial ? (
+          <PdfViewer
+            ref={viewerRef}
+            fileUrl={selectedMaterial.fileUrl}
+            page={currentPage}
+            onTotalPages={setTotalPages}
+            enableSelection
+            onSelectionChange={setHasSelection}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            왼쪽에서 파일을 선택하거나 업로드하세요.
+          </div>
+        )}
+      </StudyShell>
+
+      {/* 문제 접근 가이드 팝업 */}
       {guideExpanded && questionHelp && (
-        <div className="fixed inset-0 bg-black/10 backdrop-blur-sm flex justify-center items-center px-6 py-8 z-[999]">
-          <div className="bg-white w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl p-10 relative">
-
-            <button
-              className="absolute top-5 right-5"
-              onClick={() => setGuideExpanded(false)}
-            >
-              <X className="w-8 h-8" />
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/20 px-6 py-8 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-8 shadow-2xl">
+            <button className="absolute right-4 top-4" onClick={() => setGuideExpanded(false)}>
+              <X className="h-6 w-6" />
             </button>
-
-            <h2 className="text-4xl font-extrabold mb-10">문제 접근 가이드</h2>
-
-            <div className="space-y-12 text-xl leading-relaxed">
-
+            <h2 className="mb-8 text-3xl font-extrabold">문제 접근 가이드</h2>
+            <div className="space-y-8 text-lg leading-relaxed">
               <section>
-                <div className="font-bold text-2xl mb-3">🔍 핵심 개념</div>
-                <ul className="list-disc ml-7 space-y-2">
-                  {questionHelp.keyConcepts.map((k, i) => (
-                    <li key={i}>{k}</li>
-                  ))}
+                <div className="mb-2 text-xl font-bold">🔍 핵심 개념</div>
+                <ul className="ml-6 list-disc space-y-1">
+                  {questionHelp.keyConcepts.map((k, i) => <li key={i}>{k}</li>)}
                 </ul>
               </section>
-
               <section>
-                <div className="font-bold text-2xl mb-3">📘 접근 단계</div>
-                <ol className="list-decimal ml-7 space-y-2">
-                  {questionHelp.approachSteps.map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
+                <div className="mb-2 text-xl font-bold">📘 접근 단계</div>
+                <ol className="ml-6 list-decimal space-y-1">
+                  {questionHelp.approachSteps.map((s, i) => <li key={i}>{s}</li>)}
                 </ol>
               </section>
-
               <section>
-                <div className="font-bold text-2xl mb-3">⚠️ 주의할 점</div>
-                <ul className="list-disc ml-7 space-y-2">
-                  {questionHelp.cautionPoints.map((c, i) => (
-                    <li key={i}>{c}</li>
-                  ))}
+                <div className="mb-2 text-xl font-bold">⚠️ 주의할 점</div>
+                <ul className="ml-6 list-disc space-y-1">
+                  {questionHelp.cautionPoints.map((c, i) => <li key={i}>{c}</li>)}
                 </ul>
               </section>
-
               <section>
-                <div className="font-bold text-2xl mb-3">✏️ 문제 표현의 의미</div>
-                <ul className="list-disc ml-7 space-y-2">
+                <div className="mb-2 text-xl font-bold">✏️ 문제 표현의 의미</div>
+                <ul className="ml-6 list-disc space-y-1">
                   {questionHelp.phraseExplanations.map((p, i) => (
-                    <li key={i}>
-                      <b>{p.phrase}</b>: {p.meaning}
-                    </li>
+                    <li key={i}><b>{p.phrase}</b>: {p.meaning}</li>
                   ))}
                 </ul>
               </section>
-
             </div>
-
           </div>
         </div>
       )}
-
-    </div>
+    </>
   );
 }
