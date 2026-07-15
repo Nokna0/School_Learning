@@ -16,17 +16,17 @@ export default function SubjectGrid() {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
       {SUBJECTS.map((s) => (
         <Link key={s.key} href={s.href}>
-          <Card className="cursor-pointer border-2 border-transparent hover:border-indigo-400 hover:shadow-lg transition-all h-full">
+          <Card className="h-full cursor-pointer border-2 border-transparent transition-all hover:border-indigo-400 hover:shadow-lg">
             <CardHeader>
-              <div className="text-5xl mb-4">{s.emoji}</div>
+              <div className="mb-4 text-5xl">{s.emoji}</div>
               <CardTitle className="text-2xl">{s.label}</CardTitle>
               <CardDescription>{s.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600 mb-4">{s.detail}</p>
+              <p className="mb-4 text-muted-foreground">{s.detail}</p>
               <Button className="w-full bg-indigo-600 hover:bg-indigo-700">
                 시작하기
-                <ArrowRight className="ml-2 w-4 h-4" />
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </CardContent>
           </Card>

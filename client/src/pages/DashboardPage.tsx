@@ -9,14 +9,15 @@ import { Link, useLocation } from "wouter";
 import {
   ArrowRight,
   BookMarked,
+  CircleUser,
   Clock,
-  Settings,
   Target,
   TrendingUp,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import SubjectGrid from "@/components/SubjectGrid";
+import { SUBJECTS } from "@/lib/subjects";
 
 function StatCard({
   icon,
@@ -28,14 +29,14 @@ function StatCard({
   value: string;
 }) {
   return (
-    <Card className="border-0 shadow-md">
-      <CardContent className="pt-6 flex items-center gap-4">
-        <div className="w-12 h-12 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">
+    <Card className="py-0">
+      <CardContent className="flex items-center gap-4 px-5 py-5">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
           {icon}
         </div>
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold text-foreground">{value}</p>
         </div>
       </CardContent>
     </Card>
@@ -54,31 +55,32 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="text-2xl font-bold text-indigo-600">🎓 EduTech</div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 hidden sm:inline">
-              {user?.name}님
-            </span>
-            <Link href="/account">
-              <Button variant="ghost" size="sm">
-                <Settings className="w-4 h-4" />
-              </Button>
-            </Link>
-            <Button variant="outline" size="sm" onClick={onLogout}>
-              로그아웃
-            </Button>
-          </div>
+    <div className="flex min-h-screen flex-col bg-background">
+      {/* ===== 상단바 (학습 페이지와 동일한 스타일) ===== */}
+      <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center justify-between border-b bg-card px-4">
+        <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+          🎓 EduTech
         </div>
-      </nav>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-sm text-muted-foreground sm:inline">
+            {user?.name}님
+          </span>
+          <Link href="/account">
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="계정">
+              <CircleUser className="h-5 w-5" />
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={onLogout}>
+            로그아웃
+          </Button>
+        </div>
+      </header>
 
-      <div className="container mx-auto px-4 py-10 space-y-12">
+      <div className="mx-auto w-full max-w-6xl flex-1 space-y-12 px-4 py-10">
         {/* Hero / 학습 시작 */}
-        <section className="rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white p-8 md:p-12 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <section className="flex flex-col gap-6 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 p-8 text-white md:flex-row md:items-center md:justify-between md:p-12">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-2">
+            <h1 className="mb-2 text-3xl font-bold md:text-4xl">
               다시 오신 걸 환영해요, {user?.name}님 👋
             </h1>
             <p className="text-indigo-100">
@@ -88,38 +90,38 @@ export default function DashboardPage() {
           <Link href="/subjects">
             <Button
               size="lg"
-              className="bg-white text-indigo-700 hover:bg-indigo-50 text-lg px-8"
+              className="bg-white px-8 text-lg text-indigo-700 hover:bg-indigo-50"
             >
               학습 시작하기
-              <ArrowRight className="ml-2 w-5 h-5" />
+              <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>
         </section>
 
         {/* 학습 통계 */}
         <section>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">학습 통계</h2>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-foreground">학습 통계</h2>
             <Link href="/records">
               <Button variant="ghost" size="sm">
-                <BookMarked className="w-4 h-4 mr-2" />
+                <BookMarked className="mr-2 h-4 w-4" />
                 기록 전체 보기
               </Button>
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <StatCard
-              icon={<Clock className="w-6 h-6" />}
+              icon={<Clock className="h-6 w-6" />}
               label="총 학습 시간"
               value={`${stats?.totalMinutes ?? 0}분`}
             />
             <StatCard
-              icon={<Target className="w-6 h-6" />}
+              icon={<Target className="h-6 w-6" />}
               label="학습 기록 수"
               value={`${stats?.totalRecords ?? 0}회`}
             />
             <StatCard
-              icon={<TrendingUp className="w-6 h-6" />}
+              icon={<TrendingUp className="h-6 w-6" />}
               label="평균 점수"
               value={
                 stats && stats.totalRecords > 0
@@ -128,27 +130,35 @@ export default function DashboardPage() {
               }
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(stats?.bySubject ?? []).map((s) => (
-              <Card key={s.subject} className="border-0 shadow-md">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">{s.label}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-gray-600">
-                  <p>학습 {s.records}회 · {s.minutes}분</p>
-                  <p>
-                    평균 점수{" "}
-                    {s.records > 0 ? `${s.averageScore.toFixed(0)}점` : "-"}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {(stats?.bySubject ?? []).map((s) => {
+              const emoji = SUBJECTS.find((x) => x.key === s.subject)?.emoji;
+              return (
+                <Card key={s.subject}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      {emoji && <span>{emoji}</span>}
+                      {s.label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    <p>
+                      학습 {s.records}회 · {s.minutes}분
+                    </p>
+                    <p>
+                      평균 점수{" "}
+                      {s.records > 0 ? `${s.averageScore.toFixed(0)}점` : "-"}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </section>
 
         {/* 과목 빠른 접근 */}
         <section>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">과목 바로가기</h2>
+          <h2 className="mb-6 text-xl font-bold text-foreground">과목 바로가기</h2>
           <SubjectGrid />
         </section>
       </div>
